@@ -47,13 +47,16 @@ overlayRoot?.setAttribute('tabindex','-1');
 let fallbackPanel=null, fallbackPanelMesh=null, fallbackButtonMesh=null;
 let fallbackBtnHide=null, fallbackBtnFollow=null; // extra buttons
 let panelCanvas=null, panelCtx=null, panelTex=null;
-let panelMode='head'; // 'head' | 'docked' | 'hidden'
+let panelMode='hidden'; // 'head' | 'docked' | 'hidden' (default hidden)
 const interactiveTargets=[]; const raycaster=new THREE.Raycaster(); const _tmpMat=new THREE.Matrix4();
 let controller0=null, controller1=null; let controllerGrip0=null, controllerGrip1=null; let controllerLine0=null, controllerLine1=null;
 let hitTestSource=null, viewerSpace=null, haveHitPose=false; const lastHitPos=new THREE.Vector3(); let reticle=null; const dockedPos=new THREE.Vector3();
+// Hand pinch states for AR area control
+let pinchOne={active:false,start:{x:0,z:0},base:{lat:0,lon:0}};
+let pinchTwo={active:false,startDist:0,baseRadius:0};
 
 // HUD (head-locked mini toolbar)
-let hud=null, hudPlace=null, hudFollow=null, hudHide=null;
+let hud=null, hudPlace=null, hudFollow=null, hudHide=null, hudChat=null;
 
 function makeHudIcon(text, w=0.14, h=0.06){
   const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
@@ -67,11 +70,12 @@ function makeHudIcon(text, w=0.14, h=0.06){
 function ensureHUD(){
   if (hud) return;
   hud = new THREE.Group();
-  hudPlace = makeHudIcon('Place'); hudPlace.position.set(-0.18,-0.08,0); hudPlace.userData.action='place-markers';
-  hudFollow = makeHudIcon('Follow'); hudFollow.position.set(0.0,-0.08,0); hudFollow.userData.action='toggle-follow';
-  hudHide = makeHudIcon('Hide'); hudHide.position.set(0.18,-0.08,0); hudHide.userData.action='hide-panel';
-  hud.add(hudPlace); hud.add(hudFollow); hud.add(hudHide); scene.add(hud);
-  interactiveTargets.push(hudPlace, hudFollow, hudHide);
+  hudPlace = makeHudIcon('Place'); hudPlace.position.set(-0.24,-0.08,0); hudPlace.userData.action='place-markers';
+  hudFollow = makeHudIcon('Follow'); hudFollow.position.set(-0.08,-0.08,0); hudFollow.userData.action='toggle-follow';
+  hudChat = makeHudIcon('Chat'); hudChat.position.set(0.08,-0.08,0); hudChat.userData.action='toggle-chat';
+  hudHide = makeHudIcon('Hide'); hudHide.position.set(0.24,-0.08,0); hudHide.userData.action='hide-panel';
+  hud.add(hudPlace); hud.add(hudFollow); hud.add(hudChat); hud.add(hudHide); scene.add(hud);
+  interactiveTargets.push(hudPlace, hudFollow, hudChat, hudHide);
   hud.onBeforeRender = ()=>{
     const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
     const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
@@ -139,8 +143,17 @@ function ensureControllers(session){
       const hit=isects[0].object?.userData?.action||'panel';
       if(hit==='place-markers' && haveHitPose){
         markers.position.set(lastHitPos.x,lastHitPos.y,lastHitPos.z);
-        if(fallbackPanel) fallbackPanel.position.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z);
+        dockedPos.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z);
+        panelMode='docked'; redrawPanelCanvas();
         try{ if(fallbackButtonMesh?.material){ fallbackButtonMesh.material.opacity=0.2; setTimeout(()=>fallbackButtonMesh.material.opacity=0.0001,150);} }catch{}
+      } else if(hit==='toggle-follow'){
+        panelMode = panelMode==='head' ? 'docked' : 'head';
+        redrawPanelCanvas();
+        if(panelMode==='head' && fallbackPanel) fallbackPanel.visible=true;
+      } else if(hit==='hide-panel'){
+        panelMode='hidden'; if(fallbackPanel) fallbackPanel.visible=false; if(hud) hud.visible=false;
+      } else if(hit==='toggle-chat'){
+        if (overlayRoot){ const cur = overlayRoot.style.display; overlayRoot.style.display = (cur==='none')?'':'none'; }
       } else {
         const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
         const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
@@ -158,7 +171,7 @@ function ensureControllers(session){
 
 function ensureGlobalSelect(session){
   if (!session) return; const refSpace=renderer.xr.getReferenceSpace(); const q=new THREE.Quaternion();
-  const handle=(e)=>{ if(!fallbackPanelMesh) return; try{ const pose=e.frame?.getPose?.(e.inputSource?.targetRaySpace, refSpace); if(!pose)return; const p=pose.transform.position; const o=pose.transform.orientation; const origin=new THREE.Vector3(p.x,p.y,p.z); q.set(o.x,o.y,o.z,o.w); const direction=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize(); raycaster.set(origin,direction); const isects=raycaster.intersectObjects(interactiveTargets,true); if(isects.length>0){ const hit=isects[0].object?.userData?.action||'panel'; if(hit==='place-markers' && haveHitPose){ markers.position.set(lastHitPos.x,lastHitPos.y,lastHitPos.z); if(fallbackPanel) fallbackPanel.position.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z); } else { const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const target=camPos.add(camDir.multiplyScalar(2)); markers.position.copy(target); markers.position.y=THREE.MathUtils.clamp(markers.position.y,-2,5); } } }catch{} };
+  const handle=(e)=>{ if(!fallbackPanelMesh) return; try{ const pose=e.frame?.getPose?.(e.inputSource?.targetRaySpace, refSpace); if(!pose)return; const p=pose.transform.position; const o=pose.transform.orientation; const origin=new THREE.Vector3(p.x,p.y,p.z); q.set(o.x,o.y,o.z,o.w); const direction=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize(); raycaster.set(origin,direction); const isects=raycaster.intersectObjects(interactiveTargets,true); if(isects.length>0){ const hit=isects[0].object?.userData?.action||'panel'; if(hit==='place-markers' && haveHitPose){ markers.position.set(lastHitPos.x,lastHitPos.y,lastHitPos.z); dockedPos.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z); panelMode='docked'; redrawPanelCanvas(); } else if(hit==='toggle-follow'){ panelMode = panelMode==='head' ? 'docked' : 'head'; redrawPanelCanvas(); if(panelMode==='head' && fallbackPanel) fallbackPanel.visible=true; } else if(hit==='hide-panel'){ panelMode='hidden'; if(fallbackPanel) fallbackPanel.visible=false; if(hud) hud.visible=false; } else if(hit==='toggle-chat'){ if (overlayRoot){ const cur=overlayRoot.style.display; overlayRoot.style.display = (cur==='none')?'':'none'; } } else { const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const target=camPos.add(camDir.multiplyScalar(2)); markers.position.copy(target); markers.position.y=THREE.MathUtils.clamp(markers.position.y,-2,5); } } }catch{} };
   session.addEventListener('select', handle); session.addEventListener('selectstart', handle);
 }
 
@@ -166,9 +179,9 @@ function ensureGlobalSelect(session){
 function makeLabel(text){
   const cv=document.createElement('canvas'); const s=256; cv.width=cv.height=s; const ctx=cv.getContext('2d');
   ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,s,s); ctx.fillStyle='#cde3ff'; ctx.font='bold 46px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,s/2,s/2);
-  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8; const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}); const sp=new THREE.Sprite(mat); sp.scale.set(16,8,1); sp.renderOrder=999; sp.userData.baseScale={x:16,y:8}; return sp;
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8; const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}); const sp=new THREE.Sprite(mat); sp.scale.set(12,5.5,1); sp.renderOrder=999; sp.userData.baseScale={x:12,y:5.5}; return sp;
 }
-function updateLabelScales(){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const tmp=new THREE.Vector3(); for(const m of markers.children){ if(!m||!m.children) continue; m.getWorldPosition(tmp); const d=camPos.distanceTo(tmp); const s=THREE.MathUtils.clamp(1.5/Math.max(0.3,d),0.6,2.2); for(const ch of m.children){ if(ch&&ch.isSprite){ const base=ch.userData?.baseScale||{x:16,y:8}; ch.scale.set(base.x*s, base.y*s, 1); ch.renderOrder=999; } } } }
+function updateLabelScales(){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const tmp=new THREE.Vector3(); for(const m of markers.children){ if(!m||!m.children) continue; m.getWorldPosition(tmp); const d=camPos.distanceTo(tmp); const s=THREE.MathUtils.clamp(1.2/Math.max(0.5,d),0.35,1.1); for(const ch of m.children){ if(ch&&ch.isSprite){ const base=ch.userData?.baseScale||{x:12,y:5.5}; ch.scale.set(base.x*s, base.y*s, 1); ch.renderOrder=999; } } } }
 
 // Presets
 const PRESETS_DEFAULT = [
@@ -274,7 +287,52 @@ async function startAR(){
   }catch(e){ console.error('startAR failed', e); alert('AR開始に失敗: '+(e?.message||e)); }
 }
 
-function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame){ if(hitTestSource){ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; lastHitPos.set(p.x,p.y,p.z); haveHitPose=true; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { haveHitPose=false; if(reticle) reticle.visible=false; } } } if(fallbackPanel){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const pos=camPos.clone().add(camDir.multiplyScalar(0.9)); fallbackPanel.position.copy(pos); fallbackPanel.lookAt(camPos); } updateLabelScales(); renderer.render(scene,camera); }); }
+function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame){ if(hitTestSource){ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; lastHitPos.set(p.x,p.y,p.z); haveHitPose=true; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { haveHitPose=false; if(reticle) reticle.visible=false; } } trackHands(session, frame, refSpace); } if(fallbackPanel){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const pos=camPos.clone().add(camDir.multiplyScalar(0.9)); if(panelMode==='head'){ fallbackPanel.visible=true; fallbackPanel.position.copy(pos);} else if(panelMode==='docked'){ fallbackPanel.visible=true; fallbackPanel.position.copy(dockedPos);} fallbackPanel.lookAt(camPos); } updateLabelScales(); renderer.render(scene,camera); }); }
+
+// Track hand pinches: one-hand moves lat/lon, two-hand scales radius
+function trackHands(session, frame, refSpace){
+  const lat0 = Number(latI.value), lon0 = Number(lonI.value);
+  const hands = {};
+  for (const src of session.inputSources){
+    if(!src.hand) continue;
+    const tip = src.hand.get('index-finger-tip');
+    const thumb = src.hand.get('thumb-tip');
+    const jt = tip && frame.getJointPose(tip, refSpace);
+    const jb = thumb && frame.getJointPose(thumb, refSpace);
+    if(!jt || !jb) continue;
+    const dx = jt.transform.position.x - jb.transform.position.x;
+    const dy = jt.transform.position.y - jb.transform.position.y;
+    const dz = jt.transform.position.z - jb.transform.position.z;
+    const dist = Math.hypot(dx,dy,dz);
+    const pinching = dist < 0.025;
+    hands[src.handedness] = { pinching, tip: jt.transform.position };
+  }
+  const left = hands.left?.pinching; const right = hands.right?.pinching;
+  // Two-hand pinch → radius
+  if (left && right){
+    const lx=hands.left.tip.x, lz=hands.left.tip.z; const rx=hands.right.tip.x, rz=hands.right.tip.z;
+    const d = Math.hypot(lx-rx, lz-rz);
+    if(!pinchTwo.active){ pinchTwo={active:true,startDist:d,baseRadius:Number(radI.value||30)}; }
+    const factor = THREE.MathUtils.clamp(d / (pinchTwo.startDist||d), 0.4, 2.5);
+    const newR = THREE.MathUtils.clamp(pinchTwo.baseRadius * factor, 5, 120);
+    radI.value = String(Math.round(newR));
+  } else if (pinchTwo.active) {
+    pinchTwo.active=false; refresh();
+  }
+  // One-hand pinch (exclusive XOR)
+  const single = (left ^ right) ? (left ? 'left' : 'right') : null;
+  if (single){
+    const tip = hands[single].tip; const x=tip.x, z=tip.z;
+    if(!pinchOne.active){ pinchOne={active:true,start:{x,z},base:{lat:lat0, lon:lon0}}; }
+    const dxm = x - pinchOne.start.x; const dzm = z - pinchOne.start.z; // meters in local-floor
+    const dlon = dxm / (111320*Math.cos(pinchOne.base.lat*Math.PI/180));
+    const dlat = dzm / 111132; // approximate: +z→北
+    latI.value = String(pinchOne.base.lat + dlat);
+    lonI.value = String(pinchOne.base.lon + dlon);
+  } else if (pinchOne.active){
+    pinchOne.active=false; refresh();
+  }
+}
 
 // Kick-off
 refresh();
