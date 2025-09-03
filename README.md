@@ -1,5 +1,7 @@
 # Flight Observer (WebXR + Three.js + Gemini + Aivis)
 
+ARモードの詳細な診断・対処ガイドは `docs/AR.md` を参照してください（Meta Quest Browser対応、DOM Overlayフォールバック、手/コントローラ入力、Hit-test配置などを網羅）。
+
 空の今を見て・聞いて・触れる。ブラウザだけで、周辺のフライトを可視化し、AR上でAIに質問・音声応答しつつ、手やコントローラで操作できます。
 
 ## デプロイ（GitHub → Vercel）
@@ -53,4 +55,3 @@
 - Meta WebXR Hands: https://developers.meta.com/horizon/documentation/web/webxr-hands/
 
 問題があればコンソール/Networkログを添えて Issue/PR をお願いします。ARの挙動はデバイス・ブラウザの実装状況に依存します。
-

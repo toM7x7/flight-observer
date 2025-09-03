@@ -23,6 +23,63 @@ document.addEventListener('beforexrselect', (ev)=>{
   if (overlayRoot && overlayRoot.contains(ev.target)) ev.preventDefault();
 });
 
+// === DOM Overlay フォールバック（簡易3Dパネル）と入力周り ===
+let fallbackPanel = null;         // THREE.Group
+let fallbackPanelMesh = null;     // THREE.Mesh
+const raycaster = new THREE.Raycaster();
+const _tmpMat = new THREE.Matrix4();
+let controller0 = null, controller1 = null;
+let hitTestSource = null, viewerSpace = null; // 軽量Hit Test（任意）
+let haveHitPose = false; const lastHitPos = new THREE.Vector3();
+
+function ensureControllers(session){
+  if (controller0 && controller1) return;
+  const onSelect = (e)=>{
+    // 3Dパネルにレイが当たったら配置（Hit Test優先、なければカメラ前方）
+    if (!fallbackPanelMesh) return;
+    const src = e.target; // controller object3D
+    _tmpMat.identity().extractRotation(src.matrixWorld);
+    const origin = new THREE.Vector3().setFromMatrixPosition(src.matrixWorld);
+    const direction = new THREE.Vector3(0,0,-1).applyMatrix4(_tmpMat).normalize();
+    raycaster.set(origin, direction);
+    const isects = raycaster.intersectObject(fallbackPanelMesh, true);
+    if (isects.length>0){
+      if (haveHitPose){
+        markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
+      } else {
+        const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+        const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+        const target = camPos.add(camDir.multiplyScalar(2));
+        markers.position.copy(target);
+        markers.position.y = THREE.MathUtils.clamp(markers.position.y, -2, 5);
+      }
+    }
+  };
+  controller0 = renderer.xr.getController(0); controller0.addEventListener('select', onSelect); scene.add(controller0);
+  controller1 = renderer.xr.getController(1); controller1.addEventListener('select', onSelect); scene.add(controller1);
+}
+
+function ensureFallbackUI(session){
+  const type = session?.domOverlayState?.type; // 'head-locked' | 'floating' | 'screen' | undefined
+  if (type) return; // DOM Overlay が効く環境ならフォールバック不要
+  if (fallbackPanel) return;
+  // 簡易キャンバスで説明とボタン風を描く
+  const cvs = document.createElement('canvas'); cvs.width=1024; cvs.height=512; const ctx=cvs.getContext('2d');
+  ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,cvs.width,cvs.height);
+  ctx.fillStyle='#cde3ff'; ctx.font='bold 48px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('AR UI Fallback: Panel', 512, 120);
+  ctx.font='32px system-ui';
+  ctx.fillText('Trigger on panel to place markers (hit-test if available).', 512, 200);
+  ctx.fillStyle='#1e88ff'; ctx.fillRect(362, 300, 300, 100);
+  ctx.fillStyle='#ffffff'; ctx.font='bold 40px system-ui'; ctx.fillText('Place Here', 512, 350);
+  const tex = new THREE.CanvasTexture(cvs); tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent:true, side: THREE.DoubleSide });
+  const geo = new THREE.PlaneGeometry(0.8, 0.4);
+  fallbackPanelMesh = new THREE.Mesh(geo, mat);
+  fallbackPanel = new THREE.Group();
+  fallbackPanel.add(fallbackPanelMesh); scene.add(fallbackPanel);
+}
+
 // === プリセット ===
 const PRESETS_DEFAULT = [
   { name:'羽田T1展望',     lat:35.553972, lon:139.779978, radius:30 },
@@ -64,15 +121,31 @@ function makeLabel(text){ const cv=document.createElement('canvas'), s=256; cv.w
 let useAR=false; function toggleView(){grid.visible=!grid.visible}
 async function startAR(){
   try {
+    const ok = await navigator.xr?.isSessionSupported?.('immersive-ar');
+    if (ok === false) { alert('immersive-ar未対応の環境です'); return; }
     if (!navigator.xr) { alert('WebXR未対応のブラウザです'); return; }
     const opts = {
-      requiredFeatures: ['hit-test'],
-      optionalFeatures: ['dom-overlay','hand-tracking','local-floor'],
+      requiredFeatures: [],
+      optionalFeatures: ['dom-overlay','hand-tracking','local-floor','hit-test'],
       domOverlay: { root: overlayRoot }
     };
     renderer.xr.setReferenceSpaceType('local-floor');
     const session = await navigator.xr.requestSession('immersive-ar', opts);
     await renderer.xr.setSession(session);
+
+    // 軽量Hit Test（対応時のみ）
+    try {
+      if (session.requestReferenceSpace && session.requestHitTestSource) {
+        viewerSpace = await session.requestReferenceSpace('viewer');
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+      }
+    } catch (e) { console.warn('Hit Test unavailable', e); }
+
+    // DOM overlay が無い環境のフォールバックUI（簡易3Dパネル）
+    ensureFallbackUI(session);
+    ensureControllers(session);
+
+    console.log('domOverlayState=', session.domOverlayState?.type, 'isPresenting=', renderer.xr.isPresenting);
 
     // コントローラ squeeze で拡縮（右=拡大、左=縮小）
     session.addEventListener('squeeze', (e)=>{
@@ -83,6 +156,11 @@ async function startAR(){
 
     useAR = true;
     animateWithHands(session);
+
+    session.addEventListener('end', ()=>{
+      if (fallbackPanel) { scene.remove(fallbackPanel); fallbackPanel=null; fallbackPanelMesh=null; }
+      controller0=null; controller1=null; hitTestSource=null; viewerSpace=null; haveHitPose=false;
+    });
   } catch (e) {
     console.error('startAR failed', e);
     alert('AR開始に失敗: '+(e?.message||e));
@@ -156,6 +234,16 @@ function animateWithHands(session){
   const refSpace = renderer.xr.getReferenceSpace();
   renderer.setAnimationLoop((t, frame)=>{
     if (frame) {
+      // Hit Test 更新（対応時）
+      if (hitTestSource) {
+        const results = frame.getHitTestResults(hitTestSource) || [];
+        if (results.length>0) {
+          const pose = results[0].getPose(refSpace);
+          if (pose){
+            const p = pose.transform.position; lastHitPos.set(p.x,p.y,p.z); haveHitPose=true;
+          }
+        } else { haveHitPose=false; }
+      }
       const hands = {};
       for (const src of session.inputSources){
         if (!src.hand) continue;
@@ -199,6 +287,14 @@ function animateWithHands(session){
       // コントローラ入力（スティック上下で高度）
       pollControllers(frame);
     }
+    // DOM Overlay フォールバックUIを頭に追従
+    if (fallbackPanel){
+      const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+      const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+      const pos = camPos.clone().add(camDir.multiplyScalar(0.9));
+      fallbackPanel.position.copy(pos);
+      fallbackPanel.lookAt(camPos);
+    }
     renderer.render(scene,camera);
   });
 }
@@ -213,4 +309,3 @@ function pollControllers(frame){
     }
   }
 }
-
