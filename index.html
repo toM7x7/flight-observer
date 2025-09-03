@@ -1,36 +1,46 @@
-<!doctype html><html lang="ja"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Flight Observer</title>
-<link rel="stylesheet" href="./style.css"/>
-</head><body>
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flight Observer</title>
+  <link rel="stylesheet" href="./style.css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+</head>
+<body>
   <div id="ui">
     <div class="row">
-      <span class="logo">✈️ Flight Observer</span>
+      <span class="logo">✈ Flight Observer</span>
       <span class="src" id="src">source: opensky | flights: 0</span>
     </div>
     <div class="row">
-      中心(lat,lon): <input id="lat" value="35.5494"/><input id="lon" value="139.7798"/>
-      半径km:<input id="radius" value="30"/>
-      <button id="fetchBtn">取得</button><button id="toggleBtn">表示切替</button>
+      中心(lat,lon):
+      <input id="lat" value="35.5494" />
+      <input id="lon" value="139.7798" />
+      半径km:
+      <input id="radius" value="30" />
+      <button id="fetchBtn">取得</button>
+      <button id="toggleBtn">表示切替</button>
       <button id="startAR">START AR</button>
-      <!-- 中心(lat,lon)入力の並びに追記 -->
       <select id="preset"></select>
       <button id="savePreset">＋現在地を保存</button>
-
     </div>
   </div>
   <div id="list"></div>
   <canvas id="c"></canvas>
+
   <!-- DOM Overlay 用の最小チャットUI -->
   <div id="overlay" class="overlay">
     <div class="chat">
       <div class="row">
-        <input id="q" placeholder="見上げてる機体について質問…" />
+        <input id="q" placeholder="見上げてる機体にひと言…" />
         <button id="ask">送信</button>
-        <label><input type="checkbox" id="speak" checked/> 読み上げ</label>
+        <label><input type="checkbox" id="speak" checked /> 読み上げ</label>
       </div>
       <div id="log"></div>
     </div>
   </div>
+
   <script type="module" src="./main.js"></script>
-</body></html>
+</body>
+</html>
