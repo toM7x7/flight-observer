@@ -52,6 +52,35 @@ const interactiveTargets=[]; const raycaster=new THREE.Raycaster(); const _tmpMa
 let controller0=null, controller1=null; let controllerGrip0=null, controllerGrip1=null; let controllerLine0=null, controllerLine1=null;
 let hitTestSource=null, viewerSpace=null, haveHitPose=false; const lastHitPos=new THREE.Vector3(); let reticle=null; const dockedPos=new THREE.Vector3();
 
+// HUD (head-locked mini toolbar)
+let hud=null, hudPlace=null, hudFollow=null, hudHide=null;
+
+function makeHudIcon(text, w=0.14, h=0.06){
+  const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
+  ctx.fillStyle='#22303a'; ctx.fillRect(0,0,256,128);
+  ctx.strokeStyle='#4b6a84'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124);
+  ctx.fillStyle='#cfe8ff'; ctx.font='bold 44px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,128,64);
+  const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat); return mesh;
+}
+
+function ensureHUD(){
+  if (hud) return;
+  hud = new THREE.Group();
+  hudPlace = makeHudIcon('Place'); hudPlace.position.set(-0.18,-0.08,0); hudPlace.userData.action='place-markers';
+  hudFollow = makeHudIcon('Follow'); hudFollow.position.set(0.0,-0.08,0); hudFollow.userData.action='toggle-follow';
+  hudHide = makeHudIcon('Hide'); hudHide.position.set(0.18,-0.08,0); hudHide.userData.action='hide-panel';
+  hud.add(hudPlace); hud.add(hudFollow); hud.add(hudHide); scene.add(hud);
+  interactiveTargets.push(hudPlace, hudFollow, hudHide);
+  hud.onBeforeRender = ()=>{
+    const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
+    const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+    const pos=camPos.clone().add(camDir.multiplyScalar(0.7));
+    hud.position.copy(pos);
+    hud.lookAt(camPos);
+  };
+}
+
 function redrawPanelCanvas(){
   if(!panelCtx||!panelCanvas) return;
   const cvs=panelCanvas, ctx=panelCtx; ctx.clearRect(0,0,cvs.width,cvs.height);
@@ -230,8 +259,8 @@ async function startAR(){
     // Hit-test
     try{ if(session.requestReferenceSpace && session.requestHitTestSource){ viewerSpace=await session.requestReferenceSpace('viewer'); hitTestSource=await session.requestHitTestSource({ space: viewerSpace }); } }catch(e){ console.warn('Hit Test unavailable', e); }
 
-    // Fallback UI + controllers
-    ensureFallbackUI(session); ensureControllers(session); ensureGlobalSelect(session);
+    // Fallback UI + HUD + controllers
+    ensureFallbackUI(session); ensureHUD(); ensureControllers(session); ensureGlobalSelect(session);
     if(controllerLine0) controller0.add(controllerLine0); if(controllerLine1) controller1.add(controllerLine1);
 
     // Reticle
