@@ -1,0 +1,6 @@
+{
+  "name": "flight-observer",
+  "private": true,
+  "scripts": { "dev": "vercel dev" },
+  "dependencies": { "@google/genai": "^0.3.0" }
+}
