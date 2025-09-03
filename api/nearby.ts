@@ -35,8 +35,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const dLon = km2degLon(radiusKm, lat);
   const params = new URLSearchParams({
     lamin: String(lat - dLat), lamax: String(lat + dLat),
-    lomin: String(lon - dLon), lomax: String(lon + dLon),
-    extended: '1'
+    lomin: String(lon - dLon), lomax: String(lon + dLon)
   });
 
   // Serve stale quickly if available (up to 5x cache window)
@@ -69,7 +68,39 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   const MAX_TRY=3; let out:any=null; let delay=500;
   for(let i=0;i<MAX_TRY;i++){
     try { out = await fetchOnce(); break; }
-    catch(e:any){ const ra = Number(e?.retry||0); await new Promise(r=>setTimeout(r, Math.max(ra*1000, delay))); delay*=2; if(i===MAX_TRY-1 && !served){ return res.status(503).json({error:'opensky_unavailable', detail:String(e)}); } }
+    catch(e:any){ const ra = Number(e?.retry||0); await new Promise(r=>setTimeout(r, Math.max(ra*1000, delay))); delay*=2; }
   }
+  // 1st path OK
   if (out){ cache = { ts: Date.now(), data: out }; if(!served){ res.setHeader('x-cache','MISS'); return res.json(out); } }
+
+  // 2nd path fallback: try global feed and filter locally
+  if (!out) {
+    try {
+      const r = await fetch('https://opensky-network.org/api/states/all');
+      if (r.ok){
+        const d = await r.json();
+        const states = (d?.states||[]).map((s:any[])=>({
+          icao24:s[0], callsign:s[1]?.trim(), lon:s[5], lat:s[6],
+          baro_alt:s[7], geo_alt:s[13], vel:s[9], hdg:s[10]
+        })).filter((p:any)=>Number.isFinite(p.lat)&&Number.isFinite(p.lon))
+          .filter((p:any)=>haversineKm(lat,lon,p.lat,p.lon) <= radiusKm);
+        out = { states, fetchedAt:new Date().toISOString(), degraded:true };
+        cache = { ts: Date.now(), data: out };
+        if(!served){ res.setHeader('x-cache','MISS-global'); return res.json(out); }
+      }
+    } catch {}
+  }
+
+  // 3rd path: graceful empty response (HTTP 200)
+  if(!served){
+    res.setHeader('x-cache','EMPTY');
+    return res.json({ states: [], fetchedAt:new Date().toISOString(), degraded:true });
+  }
+}
+
+function haversineKm(lat1:number,lon1:number,lat2:number,lon2:number){
+  const R=6371e3,rad=(x:number)=>x*Math.PI/180;
+  const dlat=rad(lat2-lat1),dlon=rad(lon2-lon1);
+  const a=Math.sin(dlat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dlon/2)**2;
+  return (2*R*Math.asin(Math.sqrt(a)))/1000;
 }

@@ -21,7 +21,8 @@ let lastStates = [];
 const overlayRoot = document.getElementById('overlay');
 document.addEventListener('beforexrselect', (ev)=>{
   if (overlayRoot && overlayRoot.contains(ev.target)) ev.preventDefault();
-});
+}, true);
+overlayRoot?.setAttribute('tabindex','-1');
 
 // === DOM Overlay フォールバック（簡易3Dパネル）と入力周り ===
 let fallbackPanel = null;         // THREE.Group
@@ -31,6 +32,35 @@ const _tmpMat = new THREE.Matrix4();
 let controller0 = null, controller1 = null;
 let hitTestSource = null, viewerSpace = null; // 軽量Hit Test（任意）
 let haveHitPose = false; const lastHitPos = new THREE.Vector3();
+function ensureGlobalSelect(session){
+  if (!session) return;
+  const refSpace = renderer.xr.getReferenceSpace();
+  const q = new THREE.Quaternion();
+  session.addEventListener('select', (e)=>{
+    if (!fallbackPanelMesh) return;
+    try{
+      const pose = e.frame?.getPose?.(e.inputSource?.targetRaySpace, refSpace);
+      if (!pose) return;
+      const p = pose.transform.position; const o = pose.transform.orientation;
+      const origin = new THREE.Vector3(p.x,p.y,p.z);
+      q.set(o.x,o.y,o.z,o.w);
+      const direction = new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+      raycaster.set(origin, direction);
+      const isects = raycaster.intersectObject(fallbackPanelMesh, true);
+      if (isects.length>0){
+        if (haveHitPose){
+          markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
+        } else {
+          const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+          const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
+          const target = camPos.add(camDir.multiplyScalar(2));
+          markers.position.copy(target);
+          markers.position.y = THREE.MathUtils.clamp(markers.position.y, -2, 5);
+        }
+      }
+    }catch{}
+  });
+}
 
 function ensureControllers(session){
   if (controller0 && controller1) return;
@@ -124,13 +154,24 @@ async function startAR(){
     const ok = await navigator.xr?.isSessionSupported?.('immersive-ar');
     if (ok === false) { alert('immersive-ar未対応の環境です'); return; }
     if (!navigator.xr) { alert('WebXR未対応のブラウザです'); return; }
-    const opts = {
-      requiredFeatures: [],
-      optionalFeatures: ['dom-overlay','hand-tracking','local-floor','hit-test'],
-      domOverlay: { root: overlayRoot }
-    };
-    renderer.xr.setReferenceSpaceType('local-floor');
-    const session = await navigator.xr.requestSession('immersive-ar', opts);
+    let session;
+    try{
+      const optsStrict = {
+        requiredFeatures: ['dom-overlay','local-floor'],
+        optionalFeatures: ['hand-tracking','hit-test'],
+        domOverlay: { root: overlayRoot }
+      };
+      renderer.xr.setReferenceSpaceType('local-floor');
+      session = await navigator.xr.requestSession('immersive-ar', optsStrict);
+    }catch(_){
+      const optsLoose = {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['dom-overlay','hand-tracking','hit-test'],
+        domOverlay: { root: overlayRoot }
+      };
+      renderer.xr.setReferenceSpaceType('local-floor');
+      session = await navigator.xr.requestSession('immersive-ar', optsLoose);
+    }
     await renderer.xr.setSession(session);
 
     // 軽量Hit Test（対応時のみ）
@@ -144,6 +185,7 @@ async function startAR(){
     // DOM overlay が無い環境のフォールバックUI（簡易3Dパネル）
     ensureFallbackUI(session);
     ensureControllers(session);
+    ensureGlobalSelect(session);
 
     console.log('domOverlayState=', session.domOverlayState?.type, 'isPresenting=', renderer.xr.isPresenting);
 
