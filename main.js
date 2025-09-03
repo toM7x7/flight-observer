@@ -1,4 +1,4 @@
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import * as THREE from 'three';
 import { XRControllerModelFactory } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/XRControllerModelFactory.js?module';
 import { CONFIG } from './config.js';
 
@@ -74,8 +74,19 @@ function ensureControllers(session){
     const isects=raycaster.intersectObjects(interactiveTargets,true);
     if(isects.length>0){
       const hit=isects[0].object?.userData?.action||'panel';
-      if(hit==='place-markers' && haveHitPose){ markers.position.set(lastHitPos.x,lastHitPos.y,lastHitPos.z); if(fallbackPanel) fallbackPanel.position.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z); }
-      else { const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const target=camPos.add(camDir.multiplyScalar(2)); markers.position.copy(target); markers.position.y=THREE.MathUtils.clamp(markers.position.y,-2,5); }
+      if(hit==='place-markers' && haveHitPose){
+        markers.position.set(lastHitPos.x,lastHitPos.y,lastHitPos.z);
+        if(fallbackPanel) fallbackPanel.position.set(lastHitPos.x,lastHitPos.y+0.1,lastHitPos.z);
+        try{ if(fallbackButtonMesh?.material){ fallbackButtonMesh.material.opacity=0.2; setTimeout(()=>fallbackButtonMesh.material.opacity=0.0001,150);} }catch{}
+      } else {
+        const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
+        const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+        const target=camPos.add(camDir.multiplyScalar(2));
+        markers.position.copy(target);
+        markers.position.y=THREE.MathUtils.clamp(markers.position.y,-2,5);
+      }
+    } else {
+      console.debug('select: no panel hit');
     }
   };
   controller0 = renderer.xr.getController(0); controller0.addEventListener('select', onSelect); controller0.addEventListener('selectstart', onSelect); scene.add(controller0);
@@ -117,7 +128,35 @@ function llDiffMeters(lat0,lon0,lat,lon){ const Rlat=111132, Rlon=111320*Math.co
 function makeMarkerMesh({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=new THREE.MeshStandardMaterial({color:0xffc83d}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; const label=makeLabel(callsign||'N/A'); label.position.set(0,5,0); mesh.add(label); const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
 function placeMarkers(center, flights){ markers.clear(); flights.forEach(f=>{ const {x,y}=llDiffMeters(center.lat,center.lon,f.lat,f.lon); const m=makeMarkerMesh(f); m.position.set(x/10,0,y/10); markers.add(m); }); }
 
-async function refresh(){ const lat=Number(latI.value), lon=Number(lonI.value), radius=Number(radI.value||30); const url=`${CONFIG.FLIGHT_ENDPOINT}?lat=${lat}&lon=${lon}&radius_km=${radius}`; try{ const r=await fetch(url); if(!r.ok) throw new Error(`${r.status}`); const j=await r.json(); lastStates=j.states||[]; $('#src').textContent=`source: opensky | flights: ${lastStates.length}`; placeMarkers({lat,lon}, lastStates); if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera)); }catch(e){ console.error('fetch failed', e); alert('取得に失敗: '+(e?.message||e)); } }
+async function refresh(){
+  const lat=Number(latI.value), lon=Number(lonI.value), radius=Number(radI.value||30);
+  const url=`${CONFIG.FLIGHT_ENDPOINT}?lat=${lat}&lon=${lon}&radius_km=${radius}`;
+  try{
+    console.log('fetch nearby:', url);
+    const r=await fetch(url);
+    if(!r.ok) throw new Error(`${r.status}`);
+    const j=await r.json();
+    console.log('nearby resp:', j?.states?.length, j?.degraded?'degraded':'' , j?.debug||'');
+    lastStates=j.states||[];
+    $('#src').textContent=`source: opensky | flights: ${lastStates.length}`;
+    placeMarkers({lat,lon}, lastStates);
+    renderList(lastStates);
+    if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+  }catch(e){ console.error('fetch failed', e); alert('取得に失敗: '+(e?.message||e)); }
+}
+
+function renderList(states){
+  const box=$('#list'); if(!box) return;
+  box.innerHTML='<h3>フライト一覧</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join('');
+  box.querySelectorAll('.item').forEach(el=>el.addEventListener('click',async()=>{
+    const s=states[Number(el.getAttribute('data-idx'))]; if(!s) return;
+    const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon};
+    try{
+      const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})});
+      const {text}=await g.json(); appendLog(text||'(no response)');
+    }catch(e){ console.error('describe failed',e); }
+  }));
+}
 
 function toggleView(){ grid.visible=!grid.visible; }
 

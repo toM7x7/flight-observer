@@ -44,3 +44,26 @@ ARモードの詳細な診断・対処ガイドは `docs/AR.md` を参照して�
 - Meta WebXR Hands: https://developers.meta.com/horizon/documentation/web/webxr-hands/
 
 不具合はコンソール/Networkログを添えて Issue/PR をお願いします。AR/データ取得の挙動はデバイス・ブラウザ・上流APIの実装状況に依存します。
+
+## 技術スタック / 設計方針（更新）
+
+- WebXR: three.js WebXRManager（Quest Browser）。`immersive-ar` + `local-floor` + `hit-test`
+- UI: DOM Overlay（対応時）/ 3Dパネル（非対応時フォールバック）
+- 入力: hand-tracking（XRHand、片手ピンチ=上下、両手ピンチ=拡縮）/ コントローラ（squeeze/スティック）
+- 3D可視化: コントローラモデル（XRControllerModelFactory）+ レイ表示 + レティクル（Hit-test照準）
+- データ: OpenSky `/states/all` を bbox で取得、SWRキャッシュ、指数バックオフ、フォールバック（グローバル→ローカル絞り込み→空配列200）
+- AI: Gemini 2.x（要点/会話）+ Aivis（TTS）。任意で Google CSE を使ったWeb検索ツール
+
+## Known Issues / 注意事項
+
+- three の二重ロードは厳禁（Raycastやクラス比較が破綻）。importmap で `three` を固定し、アプリ側は `import * as THREE from 'three'` を使用。
+- START AR は必ずユーザー操作（クリック）内で `requestSession('immersive-ar')` を呼ぶ。
+- DOM Overlay が無い環境では 3D パネルを使用。select はレイキャストで処理。
+- OpenSky は匿名利用時にレート制限・タイムアウトがあり得る。`/api/nearby?...&debug=1` で診断。
+
+## Quest でのログ収集
+
+1. 開発者モードをON（Metaアプリ→ヘッドセット→開発者モード）
+2. USB接続→PCのChromeで `chrome://inspect/#devices` を開く
+3. Meta Quest Browser のタブを Inspect → Console/Network を取得
+4. 併せて `https://<app>/api/health` と `/api/nearby?...&debug=1` の結果を共有
