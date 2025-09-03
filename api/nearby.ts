@@ -27,6 +27,9 @@ const km2degLon = (km:number, lat:number)=> km/(111.320*Math.cos(lat*Math.PI/180
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
   res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Cache-Control','no-store');
+  res.setHeader('Access-Control-Allow-Methods','GET,OPTIONS');
+  if (req.method === 'OPTIONS') { return res.status(204).end(); }
   const lat=Number(req.query.lat), lon=Number(req.query.lon), radiusKm=Number(req.query.radius_km??50);
   if(!Number.isFinite(lat)||!Number.isFinite(lon)) return res.status(400).json({error:'lat/lon required'});
 
@@ -45,11 +48,18 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   if (staleOk) { served = true; res.setHeader('x-cache','HIT-stale'); res.json(cache.data); }
 
   const token = await getToken();
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: Record<string,string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  // Abort/timeouts for upstream calls
+  const withTimeout = async (url:string, init:RequestInit={}, ms=6000)=>{
+    const ac = new AbortController(); const id = setTimeout(()=>ac.abort(), ms);
+    try { return await fetch(url, { ...init, signal: ac.signal }); }
+    finally { clearTimeout(id); }
+  };
 
   const fetchOnce = async ()=>{
     const url = `https://opensky-network.org/api/states/all?${params.toString()}`;
-    const r = await fetch(url, { headers });
+    const r = await withTimeout(url, { headers });
     if (!r.ok){
       const retry = r.headers.get('X-Rate-Limit-Retry-After-Seconds') || r.headers.get('Retry-After');
       const txt = await r.text();
@@ -76,7 +86,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   // 2nd path fallback: try global feed and filter locally
   if (!out) {
     try {
-      const r = await fetch('https://opensky-network.org/api/states/all');
+      const r = await withTimeout('https://opensky-network.org/api/states/all');
       if (r.ok){
         const d = await r.json();
         const states = (d?.states||[]).map((s:any[])=>({
@@ -94,7 +104,12 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   // 3rd path: graceful empty response (HTTP 200)
   if(!served){
     res.setHeader('x-cache','EMPTY');
-    return res.json({ states: [], fetchedAt:new Date().toISOString(), degraded:true });
+    const debug = req.query.debug ? {
+      bbox: Object.fromEntries(params),
+      token: !!token,
+      note: 'Upstream failed; returning empty set'
+    } : undefined;
+    return res.json({ states: [], fetchedAt:new Date().toISOString(), degraded:true, debug });
   }
 }
 
