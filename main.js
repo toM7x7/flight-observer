@@ -1,4 +1,5 @@
 import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { XRControllerModelFactory } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
 const $ = s=>document.querySelector(s);
@@ -32,13 +33,17 @@ const interactiveTargets = [];    // Raycast targets for panel/button
 const raycaster = new THREE.Raycaster();
 const _tmpMat = new THREE.Matrix4();
 let controller0 = null, controller1 = null;
+let controllerGrip0 = null, controllerGrip1 = null;
+let controllerLine0 = null, controllerLine1 = null;
+let controllerModelFactory = null;
+let reticle = null;
 let hitTestSource = null, viewerSpace = null; // 軽量Hit Test（任意）
 let haveHitPose = false; const lastHitPos = new THREE.Vector3();
 function ensureGlobalSelect(session){
   if (!session) return;
   const refSpace = renderer.xr.getReferenceSpace();
   const q = new THREE.Quaternion();
-  session.addEventListener('select', (e)=>{
+  const handle = (e)=>{
     if (!fallbackPanelMesh) return;
     try{
       const pose = e.frame?.getPose?.(e.inputSource?.targetRaySpace, refSpace);
@@ -53,6 +58,7 @@ function ensureGlobalSelect(session){
         const hit = isects[0].object?.userData?.action || 'panel';
         if (hit === 'place-markers' && haveHitPose){
           markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
+          if (fallbackPanel) fallbackPanel.position.set(lastHitPos.x, lastHitPos.y + 0.1, lastHitPos.z);
         } else {
           const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
           const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
@@ -62,7 +68,9 @@ function ensureGlobalSelect(session){
         }
       }
     }catch{}
-  });
+  };
+  session.addEventListener('select', handle);
+  session.addEventListener('selectstart', handle);
 }
 
 function ensureControllers(session){
@@ -80,6 +88,7 @@ function ensureControllers(session){
       const hit = isects[0].object?.userData?.action || 'panel';
       if (hit === 'place-markers' && haveHitPose){
         markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
+        if (fallbackPanel) fallbackPanel.position.set(lastHitPos.x, lastHitPos.y + 0.1, lastHitPos.z);
       } else {
         const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
         const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
@@ -89,8 +98,17 @@ function ensureControllers(session){
       }
     }
   };
-  controller0 = renderer.xr.getController(0); controller0.addEventListener('select', onSelect); scene.add(controller0);
-  controller1 = renderer.xr.getController(1); controller1.addEventListener('select', onSelect); scene.add(controller1);
+  controller0 = renderer.xr.getController(0);
+  controller0.addEventListener('select', onSelect);
+  controller0.addEventListener('selectstart', onSelect);
+  scene.add(controller0);
+  if (controllerLine0) controller0.add(controllerLine0);
+
+  controller1 = renderer.xr.getController(1);
+  controller1.addEventListener('select', onSelect);
+  controller1.addEventListener('selectstart', onSelect);
+  scene.add(controller1);
+  if (controllerLine1) controller1.add(controllerLine1);
 }
 
 function ensureFallbackUI(session){
@@ -192,6 +210,33 @@ async function startAR(){
     }
     await renderer.xr.setSession(session);
 
+    // 可視化: コントローラモデル + レイ
+    try{
+      controllerModelFactory = new XRControllerModelFactory();
+      controllerGrip0 = renderer.xr.getControllerGrip(0);
+      controllerGrip0.add(controllerModelFactory.createControllerModel(controllerGrip0));
+      scene.add(controllerGrip0);
+      controllerGrip1 = renderer.xr.getControllerGrip(1);
+      controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+      scene.add(controllerGrip1);
+
+      const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)
+      ]);
+      const mkLine = ()=> new THREE.Line(lineGeo, new THREE.LineBasicMaterial({color:0x00aaff}));
+      controllerLine0 = mkLine(); controllerLine0.scale.z = 2.0;
+      controllerLine1 = mkLine(); controllerLine1.scale.z = 2.0;
+    }catch(e){ console.warn('controller visuals failed', e); }
+
+    // レティクル（Hit-test 照準）
+    try{
+      reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.07, 0.09, 32).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({ color:0x44ff88, transparent:true, opacity:0.85 })
+      );
+      reticle.visible = false; scene.add(reticle);
+    }catch(e){ console.warn('reticle init failed', e); }
+
     // 軽量Hit Test（対応時のみ）
     try {
       if (session.requestReferenceSpace && session.requestHitTestSource) {
@@ -206,6 +251,10 @@ async function startAR(){
     ensureGlobalSelect(session);
 
     console.log('domOverlayState=', session.domOverlayState?.type, 'isPresenting=', renderer.xr.isPresenting);
+    try{
+      const srcs = Array.from(renderer.xr.getSession()?.inputSources||[]).map(s=>({profiles:s.profiles, hand:!!s.hand, mode:s.targetRayMode}));
+      console.log('inputSources=', srcs);
+    }catch{}
 
     // コントローラ squeeze で拡縮（右=拡大、左=縮小）
     session.addEventListener('squeeze', (e)=>{
@@ -344,8 +393,9 @@ function animateWithHands(session){
           const pose = results[0].getPose(refSpace);
           if (pose){
             const p = pose.transform.position; lastHitPos.set(p.x,p.y,p.z); haveHitPose=true;
+            if (reticle){ reticle.visible = true; reticle.position.set(p.x,p.y,p.z); }
           }
-        } else { haveHitPose=false; }
+        } else { haveHitPose=false; if (reticle) reticle.visible=false; }
       }
       const hands = {};
       for (const src of session.inputSources){
