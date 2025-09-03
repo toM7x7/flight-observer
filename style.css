@@ -8,7 +8,7 @@ html,body{margin:0;height:100%;background:#0b0f14;color:#dfe6ee;font:14px/1.5 sy
 #list h3{margin:0 0 8px 0;font-size:14px;color:#9fb3c8}
 #list .item{display:flex;justify-content:space-between;padding:6px 4px;border-bottom:1px dashed #263244}
 #list .item:last-child{border-bottom:none}
-#c{position:fixed;inset:0;display:block}
+#c{position:fixed;inset:0;display:block;pointer-events:none}
 
 /* DOM Overlay: 簡易チャットUI */
 .overlay{position:fixed;left:0;right:0;bottom:0;background:rgba(10,14,20,.6);backdrop-filter:blur(6px);padding:10px;z-index:12}

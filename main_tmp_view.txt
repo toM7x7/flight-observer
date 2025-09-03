@@ -14,8 +14,7 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x223344,1.0));
 const markers=new THREE.Group(); scene.add(markers);
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
-// 最新のフライト状態を保持（チャット用）
-let lastStates = [];
+// 最新のフライト状態を保持�E�チャチE��用�E�Elet lastStates = [];
 
 // DOM overlay root と XR選択抑制
 const overlayRoot = document.getElementById('overlay');
@@ -23,20 +22,18 @@ document.addEventListener('beforexrselect', (ev)=>{
   if (overlayRoot && overlayRoot.contains(ev.target)) ev.preventDefault();
 });
 
-// === DOM Overlay フォールバック（簡易3Dパネル）と入力周り ===
+// === DOM Overlay フォールバック�E�簡昁EDパネル�E�と入力周めE===
 let fallbackPanel = null;         // THREE.Group
 let fallbackPanelMesh = null;     // THREE.Mesh
 const raycaster = new THREE.Raycaster();
 const _tmpMat = new THREE.Matrix4();
 let controller0 = null, controller1 = null;
-let hitTestSource = null, viewerSpace = null; // 軽量Hit Test（任意）
-let haveHitPose = false; const lastHitPos = new THREE.Vector3();
+let hitTestSource = null, viewerSpace = null; // 軽量Hit Test�E�任意！Elet haveHitPose = false; const lastHitPos = new THREE.Vector3();
 
 function ensureControllers(session){
   if (controller0 && controller1) return;
   const onSelect = (e)=>{
-    // 3Dパネルにレイが当たったら配置（Hit Test優先、なければカメラ前方）
-    if (!fallbackPanelMesh) return;
+    // 3Dパネルにレイが当たったら配置�E�Eit Test優先、なければカメラ前方�E�E    if (!fallbackPanelMesh) return;
     const src = e.target; // controller object3D
     _tmpMat.identity().extractRotation(src.matrixWorld);
     const origin = new THREE.Vector3().setFromMatrixPosition(src.matrixWorld);
@@ -61,10 +58,8 @@ function ensureControllers(session){
 
 function ensureFallbackUI(session){
   const type = session?.domOverlayState?.type; // 'head-locked' | 'floating' | 'screen' | undefined
-  if (type) return; // DOM Overlay が効く環境ならフォールバック不要
-  if (fallbackPanel) return;
-  // 簡易キャンバスで説明とボタン風を描く
-  const cvs = document.createElement('canvas'); cvs.width=1024; cvs.height=512; const ctx=cvs.getContext('2d');
+  if (type) return; // DOM Overlay が効く環墁E��らフォールバック不要E  if (fallbackPanel) return;
+  // 簡易キャンバスで説明とボタン風を描ぁE  const cvs = document.createElement('canvas'); cvs.width=1024; cvs.height=512; const ctx=cvs.getContext('2d');
   ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,cvs.width,cvs.height);
   ctx.fillStyle='#cde3ff'; ctx.font='bold 48px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('AR UI Fallback: Panel', 512, 120);
@@ -80,12 +75,12 @@ function ensureFallbackUI(session){
   fallbackPanel.add(fallbackPanelMesh); scene.add(fallbackPanel);
 }
 
-// === プリセット ===
+// === プリセチE�� ===
 const PRESETS_DEFAULT = [
   { name:'羽田T1展望',     lat:35.553972, lon:139.779978, radius:30 },
   { name:'成田B南端',      lat:35.757589, lon:140.383137, radius:30 },
-  { name:'伊丹 千里川',    lat:34.777094, lon:135.438095, radius:20 },
-  { name:'那覇 瀬長島',    lat:26.183469, lon:127.646278, radius:25 },
+  { name:'伊丹 十E��巁E,    lat:34.777094, lon:135.438095, radius:20 },
+  { name:'那要E瀬長島',    lat:26.183469, lon:127.646278, radius:25 },
   { name:'中部 セントレア', lat:34.858333, lon:136.805278, radius:30 }
 ];
 const PRESET_KEY='flightObserver.presets';
@@ -110,7 +105,7 @@ document.getElementById('savePreset')?.addEventListener('click', ()=>{
 });
 renderPresetSelect();
 
-// === マーカー/ラベル ===
+// === マ�Eカー/ラベル ===
 function makeMarker({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=new THREE.MeshStandardMaterial({color:0xffc83d});
   const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; const label=makeLabel(callsign||'N/A'); label.position.set(0,5,0); mesh.add(label);
   const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
@@ -122,8 +117,8 @@ let useAR=false; function toggleView(){grid.visible=!grid.visible}
 async function startAR(){
   try {
     const ok = await navigator.xr?.isSessionSupported?.('immersive-ar');
-    if (ok === false) { alert('immersive-ar未対応の環境です'); return; }
-    if (!navigator.xr) { alert('WebXR未対応のブラウザです'); return; }
+    if (ok === false) { alert('immersive-ar未対応�E環墁E��ぁE); return; }
+    if (!navigator.xr) { alert('WebXR未対応�EブラウザでぁE); return; }
     const opts = {
       requiredFeatures: [],
       optionalFeatures: ['dom-overlay','hand-tracking','local-floor','hit-test'],
@@ -133,22 +128,19 @@ async function startAR(){
     const session = await navigator.xr.requestSession('immersive-ar', opts);
     await renderer.xr.setSession(session);
 
-    // 軽量Hit Test（対応時のみ）
-    try {
+    // 軽量Hit Test�E�対応時のみ�E�E    try {
       if (session.requestReferenceSpace && session.requestHitTestSource) {
         viewerSpace = await session.requestReferenceSpace('viewer');
         hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
       }
     } catch (e) { console.warn('Hit Test unavailable', e); }
 
-    // DOM overlay が無い環境のフォールバックUI（簡易3Dパネル）
-    ensureFallbackUI(session);
+    // DOM overlay が無ぁE��墁E�EフォールバックUI�E�簡昁EDパネル�E�E    ensureFallbackUI(session);
     ensureControllers(session);
 
     console.log('domOverlayState=', session.domOverlayState?.type, 'isPresenting=', renderer.xr.isPresenting);
 
-    // コントローラ squeeze で拡縮（右=拡大、左=縮小）
-    session.addEventListener('squeeze', (e)=>{
+    // コントローラ squeeze で拡縮�E�右=拡大、左=縮小！E    session.addEventListener('squeeze', (e)=>{
       const sign = e.inputSource?.handedness === 'right' ? 1 : -1;
       const s = THREE.MathUtils.clamp(markers.scale.x * (1 + 0.1*sign), 0.1, 10);
       markers.scale.setScalar(s);
@@ -163,7 +155,7 @@ async function startAR(){
     });
   } catch (e) {
     console.error('startAR failed', e);
-    alert('AR開始に失敗: '+(e?.message||e));
+    alert('AR開始に失敁E '+(e?.message||e));
   }
 }
 
@@ -181,7 +173,7 @@ async function refresh(){
   try{ const r=await fetch(url); if(!r.ok) throw new Error(`${r.status}`); const j=await r.json();
     lastStates = j.states || [];
     $('#src').textContent=`source: opensky | flights: ${lastStates.length}`; placeMarkers({lat,lon},lastStates); renderList(lastStates); if(!useAR) animate();
-  }catch(e){ console.error('fetch failed',e); alert('取得に失敗: '+(e?.message||e)); }
+  }catch(e){ console.error('fetch failed',e); alert('取得に失敁E '+(e?.message||e)); }
 }
 
 function renderList(states){
@@ -198,7 +190,7 @@ function renderList(states){
 }
 refresh();
 
-// === AR×AI対話: チャット送信（DOM Overlay） ===
+// === AR×AI対話: チャチE��送信�E�EOM Overlay�E�E===
 const askBtn = document.getElementById('ask');
 if (askBtn) askBtn.onclick = async ()=>{
   const qEl = document.getElementById('q');
@@ -208,7 +200,7 @@ if (askBtn) askBtn.onclick = async ()=>{
   const first = document.querySelector('#list .item');
   const idx = first ? Number(first.getAttribute('data-idx')||0) : 0;
   const s = lastStates[idx];
-  if (!s) { appendLog('フライトが未選択/未取得です'); return; }
+  if (!s) { appendLog('フライトが未選抁E未取得でぁE); return; }
   const flight = { callsign:s.callsign, alt_m:s.geo_alt??s.baro_alt??0, vel_ms:s.vel??0, hdg_deg:s.hdg??0, lat:s.lat, lon:s.lon };
   try {
     const g = await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ flight, question:q })});
@@ -226,35 +218,7 @@ if (askBtn) askBtn.onclick = async ()=>{
 
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
-// === Chat without selection: region-first ask ===
-{
-  const askBtn2 = document.getElementById('ask');
-  if (askBtn2) askBtn2.onclick = async ()=>{
-    const qEl = document.getElementById('q');
-    const speakEl = document.getElementById('speak');
-    const q = (qEl?.value||'').trim();
-    if (!q) { appendLog('質問を入力してください'); return; }
-    const region = { lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) };
-    const first = document.querySelector('#list .item');
-    const idx = first ? Number(first.getAttribute('data-idx')||0) : 0;
-    const s = lastStates[idx];
-    const flight = s ? { callsign:s.callsign, alt_m:s.geo_alt??s.baro_alt??0, vel_ms:s.vel??0, hdg_deg:s.hdg??0, lat:s.lat, lon:s.lon } : undefined;
-    try {
-      const g = await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })});
-      const { text } = await g.json();
-      appendLog(text||'(no response)');
-      if (speakEl?.checked && text) {
-        const t = await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })});
-        const buf = await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play();
-      }
-    } catch (e) {
-      console.error('ask failed', e);
-      appendLog('エラー: '+(e?.message||e));
-    }
-  };
-}
-
-// === ハンドトラッキング: 片手ピンチ=上下, 両手ピンチ=拡縮 ===
+// === ハンドトラチE��ング: 牁E��ピンチE上丁E 両手ピンチE拡縮 ===
 let oneHand = { active:false, startY:0, baseY:0 };
 let twoHands = { active:false, startDist:0, baseScale:1 };
 
@@ -262,8 +226,7 @@ function animateWithHands(session){
   const refSpace = renderer.xr.getReferenceSpace();
   renderer.setAnimationLoop((t, frame)=>{
     if (frame) {
-      // Hit Test 更新（対応時）
-      if (hitTestSource) {
+      // Hit Test 更新�E�対応時�E�E      if (hitTestSource) {
         const results = frame.getHitTestResults(hitTestSource) || [];
         if (results.length>0) {
           const pose = results[0].getPose(refSpace);
@@ -285,12 +248,10 @@ function animateWithHands(session){
         const dy = jt.transform.position.y - jb.transform.position.y;
         const dz = jt.transform.position.z - jb.transform.position.z;
         const dist = Math.hypot(dx,dy,dz);
-        const pinching = dist < 0.025; // ~2.5cm 目安
-        hands[h] = { pinching, y: jt.transform.position.y, x: jt.transform.position.x, z: jt.transform.position.z, tipPos: jt.transform.position };
+        const pinching = dist < 0.025; // ~2.5cm 目宁E        hands[h] = { pinching, y: jt.transform.position.y, x: jt.transform.position.x, z: jt.transform.position.z, tipPos: jt.transform.position };
       }
 
-      // 片手ピンチ → 上下移動
-      const leftP = !!hands.left?.pinching; const rightP = !!hands.right?.pinching;
+      // 牁E��ピンチEↁE上下移勁E      const leftP = !!hands.left?.pinching; const rightP = !!hands.right?.pinching;
       const which = leftP ^ rightP ? (leftP ? 'left' : 'right') : null;
       if (which){
         if(!oneHand.active){ oneHand={active:true,startY:hands[which].y,baseY:markers.position.y}; }
@@ -300,7 +261,7 @@ function animateWithHands(session){
         oneHand.active = false;
       }
 
-      // 両手ピンチ → 拡縮
+      // 両手ピンチEↁE拡縮
       if (hands.left?.pinching && hands.right?.pinching){
         const lx=hands.left.tipPos.x, ly=hands.left.tipPos.y, lz=hands.left.tipPos.z;
         const rx=hands.right.tipPos.x,ry=hands.right.tipPos.y,rz=hands.right.tipPos.z;
@@ -312,11 +273,9 @@ function animateWithHands(session){
         twoHands.active = false;
       }
 
-      // コントローラ入力（スティック上下で高度）
-      pollControllers(frame);
+      // コントローラ入力（スチE��チE��上下で高度�E�E      pollControllers(frame);
     }
-    // DOM Overlay フォールバックUIを頭に追従
-    if (fallbackPanel){
+    // DOM Overlay フォールバックUIを頭に追征E    if (fallbackPanel){
       const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
       const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir);
       const pos = camPos.clone().add(camDir.multiplyScalar(0.9));

@@ -29,12 +29,3 @@ ARãƒ¢ãƒ¼ãƒ‰ãEè©³ç´°ãªè¨ºæ–­ãƒ»å¯¾å‡¦ã‚¬ã‚¤ãƒ‰ãE `docs/AR.md` ã‚’å‚ç…§ã—ã¦ã
 - Meta WebXR Hands: https://developers.meta.com/horizon/documentation/web/webxr-hands/
 
 å•é¡ŒãŒã‚ã‚Œã°ã‚³ãƒ³ã‚½ãƒ¼ãƒ«/Networkãƒ­ã‚°ã‚’æ·»ãˆã¦ Issue/PR ã‚’ãŠé¡˜ã„ã—ã¾ã™ã€ERã®æŒ™å‹•ã¯ãƒEƒã‚¤ã‚¹ãƒ»ãƒ–ãƒ©ã‚¦ã‚¶ã®å®Ÿè£EŠ¶æ³ã«ä¾å­˜ã—ã¾ã™ã€E
-## ƒoƒbƒNƒGƒ“ƒh‹­‰»iOpenSkyEAsk APIEŒŸõj
-
-- OpenSky /api/nearby ‚ð bbox + SWR + i”CˆÓjOAuth2 ‘Î‰ž‚ÉXVB“½–¼‚Å‚à“®ì‚µAOPENSKY_CLIENT_ID/SECRET Ý’èŽž‚Í Bearer ‚ÅˆÀ’è‰»‚µ‚Ü‚·B
-- V‹K /api/ask ‚ð’Ç‰ÁBƒ`ƒƒƒbƒg‚Í‹@‘Ì–¢‘I‘ð‚Å‚à’nˆæ•¶–¬‚Å‰ñ“šB•K—vŽž‚É Web ŒŸõiGoogle Programmable Searchj‚ðs‚¢Ao“T‚ð“Y‚¦‚Ä‰ž“š‚µ‚Ü‚·B
-
-ŠÂ‹«•Ï”iVercelj
-- OPENSKY_CLIENT_ID, OPENSKY_CLIENT_SECRETi”CˆÓEÝ’è„§j
-- GOOGLE_API_KEY, GOOGLE_CSE_IDi”CˆÓEWebŒŸõj
-- Šù‘¶: GEMINI_API_KEY, AIVIS_API_KEY, AIVIS_BASE_URLi”CˆÓj
