@@ -27,6 +27,8 @@ overlayRoot?.setAttribute('tabindex','-1');
 // === DOM Overlay フォールバック（簡易3Dパネル）と入力周り ===
 let fallbackPanel = null;         // THREE.Group
 let fallbackPanelMesh = null;     // THREE.Mesh
+let fallbackButtonMesh = null;    // THREE.Mesh (interactive button)
+const interactiveTargets = [];    // Raycast targets for panel/button
 const raycaster = new THREE.Raycaster();
 const _tmpMat = new THREE.Matrix4();
 let controller0 = null, controller1 = null;
@@ -46,9 +48,10 @@ function ensureGlobalSelect(session){
       q.set(o.x,o.y,o.z,o.w);
       const direction = new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
       raycaster.set(origin, direction);
-      const isects = raycaster.intersectObject(fallbackPanelMesh, true);
+      const isects = raycaster.intersectObjects(interactiveTargets, true);
       if (isects.length>0){
-        if (haveHitPose){
+        const hit = isects[0].object?.userData?.action || 'panel';
+        if (hit === 'place-markers' && haveHitPose){
           markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
         } else {
           const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
@@ -72,9 +75,10 @@ function ensureControllers(session){
     const origin = new THREE.Vector3().setFromMatrixPosition(src.matrixWorld);
     const direction = new THREE.Vector3(0,0,-1).applyMatrix4(_tmpMat).normalize();
     raycaster.set(origin, direction);
-    const isects = raycaster.intersectObject(fallbackPanelMesh, true);
+    const isects = raycaster.intersectObjects(interactiveTargets, true);
     if (isects.length>0){
-      if (haveHitPose){
+      const hit = isects[0].object?.userData?.action || 'panel';
+      if (hit === 'place-markers' && haveHitPose){
         markers.position.set(lastHitPos.x, lastHitPos.y, lastHitPos.z);
       } else {
         const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
@@ -104,10 +108,24 @@ function ensureFallbackUI(session){
   ctx.fillStyle='#ffffff'; ctx.font='bold 40px system-ui'; ctx.fillText('Place Here', 512, 350);
   const tex = new THREE.CanvasTexture(cvs); tex.anisotropy = 8;
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent:true, side: THREE.DoubleSide });
-  const geo = new THREE.PlaneGeometry(0.8, 0.4);
+  const geo = new THREE.PlaneGeometry(1.2, 0.6); // 広めの当たり判定
   fallbackPanelMesh = new THREE.Mesh(geo, mat);
   fallbackPanel = new THREE.Group();
-  fallbackPanel.add(fallbackPanelMesh); scene.add(fallbackPanel);
+  fallbackPanel.add(fallbackPanelMesh);
+
+  // クリック領域（物理ボタン）
+  const btnGeo = new THREE.PlaneGeometry(0.5, 0.18);
+  const btnMat = new THREE.MeshBasicMaterial({ color: 0x1e88ff, transparent:true, opacity:0.0001, side:THREE.DoubleSide });
+  fallbackButtonMesh = new THREE.Mesh(btnGeo, btnMat);
+  fallbackButtonMesh.position.set(0, -0.02, 0.001);
+  fallbackButtonMesh.userData.action = 'place-markers';
+  fallbackPanel.add(fallbackButtonMesh);
+
+  // Raycastターゲット登録
+  interactiveTargets.length = 0;
+  interactiveTargets.push(fallbackButtonMesh, fallbackPanelMesh);
+
+  scene.add(fallbackPanel);
 }
 
 // === プリセット ===
@@ -146,7 +164,7 @@ function makeMarker({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=n
   const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
 function makeLabel(text){ const cv=document.createElement('canvas'), s=256; cv.width=cv.height=s; const ctx=cv.getContext('2d');
   ctx.fillStyle='#0f141a';ctx.fillRect(0,0,s,s);ctx.fillStyle='#cde3ff';ctx.font='bold 46px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,s/2,s/2);
-  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true})); sp.scale.set(16,8,1); return sp; }
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8; const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}); const sp=new THREE.Sprite(mat); sp.scale.set(16,8,1); sp.renderOrder=999; sp.userData.baseScale={x:16,y:8}; return sp; }
 
 let useAR=false; function toggleView(){grid.visible=!grid.visible}
 async function startAR(){
@@ -268,6 +286,21 @@ if (askBtn) askBtn.onclick = async ()=>{
 
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
+// 距離に応じてラベルを読みやすいサイズに補正
+function updateLabelScales(){
+  const camPos = new THREE.Vector3(); camera.getWorldPosition(camPos);
+  const tmp = new THREE.Vector3();
+  for (const m of markers.children){
+    if (!m || !m.children) continue;
+    m.getWorldPosition(tmp);
+    const d = camPos.distanceTo(tmp); // meters-ish in scene scale
+    const s = THREE.MathUtils.clamp(1.5 / Math.max(0.3, d), 0.6, 2.2);
+    for (const ch of m.children){
+      if (ch && ch.isSprite){ const base = ch.userData?.baseScale || {x:16, y:8}; ch.scale.set(base.x*s, base.y*s, 1); ch.renderOrder = 999; }
+    }
+  }
+}
+
 // === Chat without selection: region-first ask ===
 {
   const askBtn2 = document.getElementById('ask');
@@ -378,4 +411,6 @@ function pollControllers(frame){
       markers.position.y = THREE.MathUtils.clamp(markers.position.y + (-y)*0.02, -2, 5);
     }
   }
+  // 補正: ラベルの距離スケール
+  try{ updateLabelScales(); }catch{}
 }
