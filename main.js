@@ -45,30 +45,56 @@ overlayRoot?.setAttribute('tabindex','-1');
 
 // Fallback panel (3D UI)
 let fallbackPanel=null, fallbackPanelMesh=null, fallbackButtonMesh=null;
+let fallbackBtnHide=null, fallbackBtnFollow=null; // extra buttons
+let panelCanvas=null, panelCtx=null, panelTex=null;
+let panelMode='head'; // 'head' | 'docked' | 'hidden'
 const interactiveTargets=[]; const raycaster=new THREE.Raycaster(); const _tmpMat=new THREE.Matrix4();
 let controller0=null, controller1=null; let controllerGrip0=null, controllerGrip1=null; let controllerLine0=null, controllerLine1=null;
-let hitTestSource=null, viewerSpace=null, haveHitPose=false; const lastHitPos=new THREE.Vector3(); let reticle=null;
+let hitTestSource=null, viewerSpace=null, haveHitPose=false; const lastHitPos=new THREE.Vector3(); let reticle=null; const dockedPos=new THREE.Vector3();
+
+function redrawPanelCanvas(){
+  if(!panelCtx||!panelCanvas) return;
+  const cvs=panelCanvas, ctx=panelCtx; ctx.clearRect(0,0,cvs.width,cvs.height);
+  ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,cvs.width,cvs.height);
+  ctx.fillStyle='#cde3ff'; ctx.font='bold 48px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('AR UI Fallback: Panel', 512, 110);
+  ctx.font='30px system-ui';
+  const sub = panelMode==='head'? 'Aim and Place. Then Dock.' : panelMode==='docked'? 'Docked. Use buttons below.' : 'Hidden';
+  ctx.fillText(sub, 512, 170);
+  // Buttons: Place / Dock|Follow / Hide
+  ctx.fillStyle='#1e88ff'; ctx.fillRect(250, 250, 220, 80); ctx.fillStyle='#ffffff'; ctx.font='bold 36px system-ui'; ctx.fillText('Place', 360, 290);
+  ctx.fillStyle='#546e7a'; ctx.fillRect(510, 250, 220, 80); ctx.fillStyle='#ffffff'; ctx.font='bold 28px system-ui'; ctx.fillText(panelMode==='head'? 'Dock' : 'Follow', 620, 290);
+  ctx.fillStyle='#455a64'; ctx.fillRect(770, 250, 220, 80); ctx.fillStyle='#ffffff'; ctx.font='bold 28px system-ui'; ctx.fillText('Hide', 880, 290);
+  if(panelTex) panelTex.needsUpdate=true;
+}
 
 function ensureFallbackUI(session){
   const type = session?.domOverlayState?.type; // if DOM overlay works, panel is optional
   if (type) return;
   if (fallbackPanel) return;
-  // draw canvas panel with a button
-  const cvs=document.createElement('canvas'); cvs.width=1024; cvs.height=512; const ctx=cvs.getContext('2d');
-  ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,cvs.width,cvs.height);
-  ctx.fillStyle='#cde3ff'; ctx.font='bold 48px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('AR UI Fallback: Panel', 512, 120);
-  ctx.font='32px system-ui'; ctx.fillText('Trigger on panel to place markers (hit-test if available).',512,200);
-  ctx.fillStyle='#1e88ff'; ctx.fillRect(362,300,300,100); ctx.fillStyle='#ffffff'; ctx.font='bold 40px system-ui'; ctx.fillText('Place Here',512,350);
-  const tex=new THREE.CanvasTexture(cvs); tex.anisotropy=8; const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
-  fallbackPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2,0.6), mat);
+  // draw canvas panel with buttons
+  panelCanvas=document.createElement('canvas'); panelCanvas.width=1024; panelCanvas.height=512; panelCtx=panelCanvas.getContext('2d');
+  panelTex=new THREE.CanvasTexture(panelCanvas); panelTex.anisotropy=8; const mat=new THREE.MeshBasicMaterial({map:panelTex, transparent:true, side:THREE.DoubleSide});
+  fallbackPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.8), mat);
   fallbackPanel = new THREE.Group(); fallbackPanel.add(fallbackPanelMesh);
-  // invisible button for broad hit area
-  const btnGeo=new THREE.PlaneGeometry(0.6,0.2); const btnMat=new THREE.MeshBasicMaterial({color:0x1e88ff, transparent:true, opacity:0.0001, side:THREE.DoubleSide});
-  fallbackButtonMesh=new THREE.Mesh(btnGeo, btnMat); fallbackButtonMesh.position.set(0,-0.02,0.001); fallbackButtonMesh.userData.action='place-markers';
-  fallbackPanel.add(fallbackButtonMesh);
-  interactiveTargets.length=0; interactiveTargets.push(fallbackButtonMesh, fallbackPanelMesh);
+  // invisible buttons: Place / Dock-Follow / Hide
+  const btnMat=new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0.0001, side:THREE.DoubleSide});
+  const btnGeo=new THREE.PlaneGeometry(0.36,0.12);
+  fallbackButtonMesh=new THREE.Mesh(btnGeo, btnMat); fallbackButtonMesh.position.set(-0.26,-0.02,0.001); fallbackButtonMesh.userData.action='place-markers'; fallbackPanel.add(fallbackButtonMesh);
+  fallbackBtnFollow=new THREE.Mesh(btnGeo.clone(), btnMat.clone()); fallbackBtnFollow.position.set(0.0,-0.02,0.001); fallbackBtnFollow.userData.action='toggle-follow'; fallbackPanel.add(fallbackBtnFollow);
+  fallbackBtnHide=new THREE.Mesh(btnGeo.clone(), btnMat.clone()); fallbackBtnHide.position.set(0.26,-0.02,0.001); fallbackBtnHide.userData.action='hide-panel'; fallbackPanel.add(fallbackBtnHide);
+  interactiveTargets.length=0; interactiveTargets.push(fallbackButtonMesh, fallbackPanelMesh, fallbackBtnFollow, fallbackBtnHide);
   scene.add(fallbackPanel);
+  // Per-frame positioning depending on mode
+  fallbackPanel.onBeforeRender = ()=>{
+    const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
+    const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+    const pos=camPos.clone().add(camDir.multiplyScalar(0.9));
+    if(panelMode==='head') { fallbackPanel.visible=true; fallbackPanel.position.copy(pos); }
+    else if(panelMode==='docked') { fallbackPanel.visible=true; fallbackPanel.position.copy(dockedPos); }
+    fallbackPanel.lookAt(camPos);
+  };
+  redrawPanelCanvas();
 }
 
 function ensureControllers(session){
