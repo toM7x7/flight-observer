@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { XRControllerModelFactory } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/XRControllerModelFactory.js?module';
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
 // DOM helpers
@@ -8,6 +8,14 @@ const c = $('#c'), latI=$('#lat'), lonI=$('#lon'), radI=$('#radius');
 $('#fetchBtn').onclick = refresh;
 $('#toggleBtn').onclick = ()=>toggleView();
 $('#startAR').onclick = startAR;
+document.getElementById('demoBtn')?.addEventListener('click', ()=>{
+  const lat=Number(latI.value), lon=Number(lonI.value);
+  const demo = genDemoStates({lat,lon}, 6);
+  lastStates = demo;
+  $('#src').textContent=`source: demo | flights: ${lastStates.length}`;
+  placeMarkers({lat,lon}, lastStates);
+  renderList(lastStates);
+});
 
 // three.js basics
 const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true, alpha:true});
@@ -127,6 +135,16 @@ renderPresetSelect();
 function llDiffMeters(lat0,lon0,lat,lon){ const Rlat=111132, Rlon=111320*Math.cos(lat0*Math.PI/180); return { x:(lon-lon0)*Rlon, y:(lat-lat0)*Rlat }; }
 function makeMarkerMesh({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=new THREE.MeshStandardMaterial({color:0xffc83d}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; const label=makeLabel(callsign||'N/A'); label.position.set(0,5,0); mesh.add(label); const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
 function placeMarkers(center, flights){ markers.clear(); flights.forEach(f=>{ const {x,y}=llDiffMeters(center.lat,center.lon,f.lat,f.lon); const m=makeMarkerMesh(f); m.position.set(x/10,0,y/10); markers.add(m); }); }
+
+function genDemoStates(center, n=6){
+  const out=[]; for(let i=0;i<n;i++){
+    const ang= (i/n)*Math.PI*2; const dkm= 2 + (i%3);
+    const dlat = (dkm/111.132); const dlon = (dkm/(111.320*Math.cos(center.lat*Math.PI/180)));
+    const lat = center.lat + Math.sin(ang)*dlat; const lon = center.lon + Math.cos(ang)*dlon;
+    out.push({ callsign:`DEMO${i+1}`, lat, lon, geo_alt: 200+i*50, vel: 70+i*5, hdg: (ang*180/Math.PI)%360 });
+  }
+  return out;
+}
 
 async function refresh(){
   const lat=Number(latI.value), lon=Number(lonI.value), radius=Number(radI.value||30);
