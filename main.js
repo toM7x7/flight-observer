@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
@@ -14,7 +14,7 @@ document.getElementById('demoBtn')?.addEventListener('click', ()=>{
   lastStates = demo;
   $('#src').textContent=`source: demo | flights: ${lastStates.length}`;
   placeMarkers({lat,lon}, lastStates);
-  renderList(lastStates);
+  renderList(lastStates); hookListHandlers(lastStates);
 });
 
 // three.js basics
@@ -185,24 +185,24 @@ function updateLabelScales(){ const camPos=new THREE.Vector3(); camera.getWorldP
 
 // Presets
 const PRESETS_DEFAULT = [
-  { name:'羽田 T1 展望', lat:35.553972, lon:139.779978, radius:30 },
-  { name:'成田 B 南端', lat:35.757589, lon:140.383137, radius:30 },
-  { name:'伊丹 十三側', lat:34.777094, lon:135.438095, radius:20 },
-  { name:'那覇 瀬長島', lat:26.183469, lon:127.646278, radius:25 },
-  { name:'中部 セントレア', lat:34.858333, lon:136.805278, radius:30 }
+  { name:'鄒ｽ逕ｰ T1 螻墓悍', lat:35.553972, lon:139.779978, radius:30 },
+  { name:'謌千伐 B 蜊礼ｫｯ', lat:35.757589, lon:140.383137, radius:30 },
+  { name:'莨贋ｸｹ 蜊∽ｸ牙・', lat:34.777094, lon:135.438095, radius:20 },
+  { name:'驍｣隕・轢ｬ髟ｷ蟲ｶ', lat:26.183469, lon:127.646278, radius:25 },
+  { name:'荳ｭ驛ｨ 繧ｻ繝ｳ繝医Ξ繧｢', lat:34.858333, lon:136.805278, radius:30 }
 ];
 const PRESET_KEY='flightObserver.presets';
 function getPresets(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY)||'[]').concat(PRESETS_DEFAULT);}catch{ return PRESETS_DEFAULT; } }
 function renderPresetSelect(){ const sel=document.getElementById('preset'); if(!sel) return; sel.innerHTML=''; getPresets().forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=p.name; sel.appendChild(o);}); }
 function applyPreset(idx){ const p=getPresets()[Number(idx)]; if(!p) return; document.getElementById('lat').value=String(p.lat); document.getElementById('lon').value=String(p.lon); document.getElementById('radius').value=String(p.radius); refresh(); }
 document.getElementById('preset')?.addEventListener('change', (e)=>applyPreset(e.target.value));
-document.getElementById('savePreset')?.addEventListener('click', ()=>{ const mine=JSON.parse(localStorage.getItem(PRESET_KEY)||'[]'); mine.unshift({ name:`My地点 ${new Date().toLocaleString()}`, lat:Number(latI.value), lon:Number(lonI.value), radius:Number(radI.value) }); localStorage.setItem(PRESET_KEY, JSON.stringify(mine.slice(0,20))); renderPresetSelect(); });
+document.getElementById('savePreset')?.addEventListener('click', ()=>{ const mine=JSON.parse(localStorage.getItem(PRESET_KEY)||'[]'); mine.unshift({ name:`My蝨ｰ轤ｹ ${new Date().toLocaleString()}`, lat:Number(latI.value), lon:Number(lonI.value), radius:Number(radI.value) }); localStorage.setItem(PRESET_KEY, JSON.stringify(mine.slice(0,20))); renderPresetSelect(); });
 renderPresetSelect();
 
 // Flight placement
 function llDiffMeters(lat0,lon0,lat,lon){ const Rlat=111132, Rlon=111320*Math.cos(lat0*Math.PI/180); return { x:(lon-lon0)*Rlon, y:(lat-lat0)*Rlat }; }
 function makeMarkerMesh({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=new THREE.MeshStandardMaterial({color:0xffc83d}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; const label=makeLabel(callsign||'N/A'); label.position.set(0,5,0); mesh.add(label); const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
-function placeMarkers(center, flights){ markers.clear(); flights.forEach(f=>{ const {x,y}=llDiffMeters(center.lat,center.lon,f.lat,f.lon); const m=makeMarkerMesh(f); m.position.set(x/10,0,y/10); markers.add(m); }); }
+function placeMarkers(center, flights){ markers.clear(); flights.forEach((f,i)=>{ const {x,y}=llDiffMeters(center.lat,center.lon,f.lat,f.lon); const m=makeMarkerMesh(f); m.userData.idx=i; m.position.set(x/10,0,y/10); markers.add(m); }); if(typeof applySelectionEffects==='function') applySelectionEffects(); }
 
 function genDemoStates(center, n=6){
   const out=[]; for(let i=0;i<n;i++){
@@ -216,7 +216,28 @@ function genDemoStates(center, n=6){
 
 async function refresh(){
   const lat=Number(latI.value), lon=Number(lonI.value), radius=Number(radI.value||30);
-  const url=`${CONFIG.FLIGHT_ENDPOINT}?lat=${lat}&lon=${lon}&radius_km=${radius}`;
+  const url=`${CONFIG.FLIGHT_ENDPOINT}
+function hookListHandlers(states){
+  const box=#list; if(!box) return;
+  box.querySelectorAll('.item').forEach(el=>{
+    el.onclick = async ()=>{
+      const idx=Number(el.getAttribute('data-idx'));
+      selectedIdx = (selectedIdx===idx? -1 : idx);
+      applySelectionEffects();
+      const s=states[idx]; if(!s) return;
+      const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon};
+      try{ const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}); const {text}=await g.json(); appendLog(text||'(no response)'); }catch(e){ console.error('describe failed',e); }
+    };
+  });
+}
+function applySelectionEffects(){
+  markers.children.forEach((m)=>{ if(!m.isMesh) return; const on = (m.userData?.idx===selectedIdx); m.scale.setScalar(on?1.2:1.0); if(m.material?.color){ m.material.color.setHex(on?0x66d9ff:0xffc83d); } });
+  document.querySelectorAll('#list .item').forEach(el=>{ const idx=Number(el.getAttribute('data-idx')); el.classList.toggle('selected', idx===selectedIdx); });
+  const info=document.getElementById('info'); if(!info) return; if(selectedIdx<0){ info.innerHTML=''; return; }
+  const s=lastStates[selectedIdx]; if(!s){ info.innerHTML=''; return; }
+  const alt=Math.round(s.geo_alt??s.baro_alt??0); const spd=Math.round((s.vel??0)*1.94384); const hdg=Math.round(s.hdg??0);
+  info.innerHTML = <div class='card'><div class='title'></div><div class='row'>alt  m •  kt • °</div></div>;
+}?lat=${lat}&lon=${lon}&radius_km=${radius}`;
   try{
     console.log('fetch nearby:', url);
     const r=await fetch(url);
@@ -226,14 +247,14 @@ async function refresh(){
     lastStates=j.states||[];
     $('#src').textContent=`source: opensky | flights: ${lastStates.length}`;
     placeMarkers({lat,lon}, lastStates);
-    renderList(lastStates);
+    renderList(lastStates); hookListHandlers(lastStates);
     if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera));
-  }catch(e){ console.error('fetch failed', e); alert('取得に失敗: '+(e?.message||e)); }
+  }catch(e){ console.error('fetch failed', e); alert('蜿門ｾ励↓螟ｱ謨・ '+(e?.message||e)); }
 }
 
 function renderList(states){
   const box=$('#list'); if(!box) return;
-  box.innerHTML='<h3>フライト一覧</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join('');
+  box.innerHTML='<h3>繝輔Λ繧､繝井ｸ隕ｧ</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join('');
   box.querySelectorAll('.item').forEach(el=>el.addEventListener('click',async()=>{
     const s=states[Number(el.getAttribute('data-idx'))]; if(!s) return;
     const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon};
@@ -247,15 +268,15 @@ function renderList(states){
 function toggleView(){ grid.visible=!grid.visible; }
 
 // Ask (region-first)
-const askBtn=$('#ask'); if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const { text }=await g.json(); appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
+const askBtn=$('#ask'); if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('雉ｪ蝠上ｒ蜈･蜉帙＠縺ｦ縺上□縺輔＞'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const { text }=await g.json(); appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('繧ｨ繝ｩ繝ｼ: '+(e?.message||e)); } };
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
 // AR
 async function startAR(){
   try{
-    if(!navigator.xr){ alert('WebXR未対応のブラウザです'); return; }
+    if(!navigator.xr){ alert('WebXR譛ｪ蟇ｾ蠢懊・繝悶Λ繧ｦ繧ｶ縺ｧ縺・); return; }
     const ok = await navigator.xr.isSessionSupported?.('immersive-ar');
-    if(ok===false){ alert('immersive-ar未対応の環境です'); return; }
+    if(ok===false){ alert('immersive-ar譛ｪ蟇ｾ蠢懊・迺ｰ蠅・〒縺・); return; }
     let session;
     try{
       const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hand-tracking','hit-test'], domOverlay:{ root: overlayRoot } };
@@ -284,7 +305,7 @@ async function startAR(){
 
     useAR=true; animateAR(session);
     session.addEventListener('end', ()=>{ if(fallbackPanel){ scene.remove(fallbackPanel); fallbackPanel=null; fallbackPanelMesh=null; } controller0=null; controller1=null; hitTestSource=null; viewerSpace=null; haveHitPose=false; reticle=null; });
-  }catch(e){ console.error('startAR failed', e); alert('AR開始に失敗: '+(e?.message||e)); }
+  }catch(e){ console.error('startAR failed', e); alert('AR髢句ｧ九↓螟ｱ謨・ '+(e?.message||e)); }
 }
 
 function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame){ if(hitTestSource){ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; lastHitPos.set(p.x,p.y,p.z); haveHitPose=true; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { haveHitPose=false; if(reticle) reticle.visible=false; } } trackHands(session, frame, refSpace); } if(fallbackPanel){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const pos=camPos.clone().add(camDir.multiplyScalar(0.9)); if(panelMode==='head'){ fallbackPanel.visible=true; fallbackPanel.position.copy(pos);} else if(panelMode==='docked'){ fallbackPanel.visible=true; fallbackPanel.position.copy(dockedPos);} fallbackPanel.lookAt(camPos); } updateLabelScales(); renderer.render(scene,camera); }); }
@@ -308,7 +329,7 @@ function trackHands(session, frame, refSpace){
     hands[src.handedness] = { pinching, tip: jt.transform.position };
   }
   const left = hands.left?.pinching; const right = hands.right?.pinching;
-  // Two-hand pinch → radius
+  // Two-hand pinch 竊・radius
   if (left && right){
     const lx=hands.left.tip.x, lz=hands.left.tip.z; const rx=hands.right.tip.x, rz=hands.right.tip.z;
     const d = Math.hypot(lx-rx, lz-rz);
@@ -326,7 +347,7 @@ function trackHands(session, frame, refSpace){
     if(!pinchOne.active){ pinchOne={active:true,start:{x,z},base:{lat:lat0, lon:lon0}}; }
     const dxm = x - pinchOne.start.x; const dzm = z - pinchOne.start.z; // meters in local-floor
     const dlon = dxm / (111320*Math.cos(pinchOne.base.lat*Math.PI/180));
-    const dlat = dzm / 111132; // approximate: +z→北
+    const dlat = dzm / 111132; // approximate: +z竊貞圏
     latI.value = String(pinchOne.base.lat + dlat);
     lonI.value = String(pinchOne.base.lon + dlon);
   } else if (pinchOne.active){
@@ -336,3 +357,5 @@ function trackHands(session, frame, refSpace){
 
 // Kick-off
 refresh();
+
+
