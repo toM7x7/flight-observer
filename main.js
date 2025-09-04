@@ -17,6 +17,22 @@ document.getElementById('demoBtn')?.addEventListener('click', ()=>{
   renderList(lastStates); hookListHandlers(lastStates);
 });
 
+// Robust AR button state (fail-safe): disable with reason when unsupported
+const startBtn = document.getElementById('startAR');
+async function prepareARButton(){
+  if(!startBtn) return;
+  const disable = (msg)=>{ startBtn.disabled=true; startBtn.title=msg; startBtn.textContent = 'START AR (不可)'; };
+  try{
+    if (!window.isSecureContext){ disable('HTTPSが必要です'); return; }
+    if (!('xr' in navigator)){ disable('WebXR未対応ブラウザ'); return; }
+    const ok = await navigator.xr.isSessionSupported?.('immersive-ar');
+    if (ok === false){ disable('immersive-ar未対応環境'); return; }
+    // enabled
+    startBtn.disabled=false; startBtn.title='ARを開始'; startBtn.textContent='START AR';
+  }catch(e){ disable('AR準備に失敗: '+(e?.message||e)); }
+}
+prepareARButton();
+
 // three.js basics
 const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true, alpha:true});
 renderer.setPixelRatio(devicePixelRatio);
@@ -133,7 +149,6 @@ function ensureFallbackUI(session){
 function ensureControllers(session){
   if (controller0 && controller1) return;
   const onSelect=(e)=>{
-    if (!fallbackPanelMesh) return;
     const src=e.target; _tmpMat.identity().extractRotation(src.matrixWorld);
     const origin=new THREE.Vector3().setFromMatrixPosition(src.matrixWorld);
     const direction=new THREE.Vector3(0,0,-1).applyMatrix4(_tmpMat).normalize();
