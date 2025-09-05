@@ -44,7 +44,7 @@ document.getElementById('demoBtn')?.addEventListener('click', ()=> runDemo(3));
 const startBtn = document.getElementById('startAR');
 async function prepareARButton(){
   if(!startBtn) return;
-  const disable = (msg)=>{ startBtn.disabled=false; startBtn.title=msg; startBtn.textContent='Start AR'; };
+  const disable = (msg)=>{ startBtn.disabled=true; startBtn.title=msg; startBtn.textContent='Start AR'; };
   try{
     if (!window.isSecureContext){ disable('HTTPS is required'); return; }
     if (!('xr' in navigator)){ disable('WebXR not supported'); return; }
@@ -495,6 +495,7 @@ async function checkSTT(){
   }catch{ try{ setMicState('unavailable'); }catch{} }
 }
 checkSTT();
+
 
 
 
