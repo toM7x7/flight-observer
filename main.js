@@ -86,6 +86,41 @@ overlayRoot?.setAttribute('tabindex','-1');
 let centerPin; try{ centerPin=new THREE.Mesh(new THREE.RingGeometry(0.25,0.35,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x66d9ff, transparent:true, opacity:0.9, side:THREE.DoubleSide})); centerPin.position.y=0.01; markers.add(centerPin);}catch{}
 let guideLine=null; function ensureGuideLine(){ if(guideLine) return; const geo=new THREE.BufferGeometry(); const pos=new Float32Array([0,0,0, 0,0,0]); geo.setAttribute('position', new THREE.BufferAttribute(pos,3)); const mat=new THREE.LineDashedMaterial({color:0x66d9ff, dashSize:0.25, gapSize:0.15}); guideLine=new THREE.Line(geo,mat); guideLine.computeLineDistances(); guideLine.visible=false; markers.add(guideLine); }
 
+// Simple head-locked HUD for AR
+const raycaster = new THREE.Raycaster();
+let hud=null, hudFocus=null, hudFollow=null, hudAsk=null, dirArrow=null; const interactiveTargets=[];
+function makeHudButton(text, w=0.14, h=0.06){
+  const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
+  ctx.fillStyle='#22303a'; ctx.fillRect(0,0,256,128);
+  ctx.strokeStyle='#4b6a84'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124);
+  ctx.fillStyle='#cfe8ff'; ctx.font='bold 40px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,128,64);
+  const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, side:THREE.DoubleSide});
+  return new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat);
+}
+function makeArrow(){
+  const cvs=document.createElement('canvas'); cvs.width=128; cvs.height=128; const ctx=cvs.getContext('2d');
+  ctx.clearRect(0,0,128,128); ctx.fillStyle='#66d9ff'; ctx.beginPath(); ctx.moveTo(64,8); ctx.lineTo(110,120); ctx.lineTo(64,96); ctx.lineTo(18,120); ctx.closePath(); ctx.fill();
+  const tex=new THREE.CanvasTexture(cvs); return new THREE.Mesh(new THREE.PlaneGeometry(0.08,0.08), new THREE.MeshBasicMaterial({map:tex,transparent:true}));
+}
+function ensureHUD(){ if(hud) return; hud=new THREE.Group();
+  hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.16,-0.08,0); hudFocus.userData.action='focus';
+  hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.0,-0.08,0); hudFollow.userData.action='follow';
+  hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.16,-0.08,0); hudAsk.userData.action='ask';
+  dirArrow=makeArrow(); dirArrow.position.set(0,0.06,0);
+  hud.add(hudFocus); hud.add(hudFollow); hud.add(hudAsk); hud.add(dirArrow); scene.add(hud);
+  interactiveTargets.push(hudFocus, hudFollow, hudAsk);
+  hud.onBeforeRender=()=>{
+    const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
+    const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
+    const pos=camPos.clone().add(camDir.multiplyScalar(0.8)); hud.position.copy(pos); hud.lookAt(camPos);
+    // Update arrow towards selected
+    if(selectedIdx>=0){ const m=getMarkerObjectByIndex(selectedIdx); if(m){ const to=new THREE.Vector3().subVectors(m.position, new THREE.Vector3(0,0,0)); // in marker space
+        const camQ=new THREE.Quaternion(); camera.getWorldQuaternion(camQ); const invQ=camQ.clone().invert(); const local=to.clone().applyQuaternion(invQ);
+        const ang=Math.atan2(local.x, -local.z); dirArrow.visible=true; dirArrow.rotation.z = -ang; } else { dirArrow.visible=false; } }
+    else { dirArrow.visible=false; }
+  };
+}
+
 // Labels
 function makeLabel(text){ const s=256; const cv=document.createElement('canvas'); cv.width=s; cv.height=s; const ctx=cv.getContext('2d'); ctx.fillStyle='#0f141a'; ctx.fillRect(0,0,s,s); ctx.fillStyle='#cde3ff'; ctx.font='bold 46px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,s/2,s/2); const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8; const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}); const sp=new THREE.Sprite(mat); sp.scale.set(12,5.5,1); sp.renderOrder=999; sp.userData.baseScale={x:12,y:5.5}; return sp; }
 function updateLabelScales(){ const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const tmp=new THREE.Vector3(); for(const m of markers.children){ if(!m||!m.children) continue; m.getWorldPosition(tmp); const d=camPos.distanceTo(tmp); const s=THREE.MathUtils.clamp(1.2/Math.max(0.5,d),0.35,1.1); for(const ch of m.children){ if(ch&&ch.isSprite){ const base=ch.userData?.baseScale||{x:12,y:5.5}; ch.scale.set(base.x*s, base.y*s, 1); ch.renderOrder=999; } } } }
@@ -219,9 +254,22 @@ async function startAR(){
     let session;
     try{ const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsStrict);}catch(_){ const optsLoose={ requiredFeatures:['local-floor'], optionalFeatures:['dom-overlay','hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsLoose); }
     await renderer.xr.setSession(session);
-    try{ const factory=new XRControllerModelFactory(); const grip0=renderer.xr.getControllerGrip(0); grip0.add(factory.createControllerModel(grip0)); scene.add(grip0); const grip1=renderer.xr.getControllerGrip(1); grip1.add(factory.createControllerModel(grip1)); scene.add(grip1);}catch{}
+    // Controller visuals + rays
+    try{ const factory=new XRControllerModelFactory();
+      const grip0=renderer.xr.getControllerGrip(0); grip0.add(factory.createControllerModel(grip0)); scene.add(grip0);
+      const grip1=renderer.xr.getControllerGrip(1); grip1.add(factory.createControllerModel(grip1)); scene.add(grip1);
+      const mkRay=()=>{ const geo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)]); const ln=new THREE.Line(geo, new THREE.LineBasicMaterial({color:0x00aaff})); ln.scale.z=1.5; return ln; };
+      const ctrl0=renderer.xr.getController(0); ctrl0.add(mkRay()); scene.add(ctrl0);
+      const ctrl1=renderer.xr.getController(1); ctrl1.add(mkRay()); scene.add(ctrl1);
+      const onSelect=(e)=>{ if(!hud) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects(interactiveTargets,true); if(hits.length>0){ const a=hits[0].object?.userData?.action; if(a==='focus'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0);} }
+        else if(a==='follow'){ followMode=!followMode; if(followChk){ followChk.checked=followMode; } if(followMode && selectedIdx>=0){ const s=lastStates[selectedIdx]; selectedKey=s?.icao24||s?.callsign||null; } }
+        else if(a==='ask'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}).then(r=>r.json()).then(({text})=>{ appendLog(text||'(no response)'); }); } }
+      } };
+      ctrl0.addEventListener('select', onSelect); ctrl1.addEventListener('select', onSelect);
+    }catch{}
     try{ if(session.requestReferenceSpace && session.requestHitTestSource){ viewerSpace=await session.requestReferenceSpace('viewer'); hitTestSource=await session.requestHitTestSource({ space: viewerSpace }); } }catch{}
     try{ reticle=new THREE.Mesh(new THREE.RingGeometry(0.07,0.09,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x44ff88, transparent:true, opacity:0.85 })); reticle.visible=false; scene.add(reticle);}catch{}
+    ensureHUD();
     useAR=true; animateAR(session);
     session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; });
   }catch(e){ alert('AR開始に失敗しました: '+(e?.message||e)); }
