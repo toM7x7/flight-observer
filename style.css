@@ -13,7 +13,7 @@ html,body{margin:0;height:100%;background:#0b0f14;color:#dfe6ee;font:14px/1.5 sy
 #info .card{display:flex;flex-direction:column;gap:4px}
 #info .title{font-weight:700;color:#cfe1ff}
 #info .row{color:#9fb3c8;font-size:12px}
-#c{position:fixed;inset:0;display:block;pointer-events:auto;cursor:grab}
+#c{position:fixed;inset:0;display:block;pointer-events:none;cursor:grab}
 
 /* DOM Overlay: 簡易チャットUI */
 .overlay{position:fixed;left:0;right:0;bottom:0;background:rgba(10,14,20,.6);backdrop-filter:blur(6px);padding:10px;z-index:12;pointer-events:auto}

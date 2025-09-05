@@ -40,7 +40,7 @@ function runDemo(n=3){
 const startBtn = document.getElementById('startAR');
 async function prepareARButton(){
   if(!startBtn) return;
-  const disable = (msg)=>{ startBtn.disabled=true; startBtn.title=msg; startBtn.textContent = 'START AR（利用不可）'; };
+  const disable = (msg)=>{ startBtn.disabled=false; startBtn.title=msg; startBtn.textContent='AR開始'; };
   try{
     if (!window.isSecureContext){ disable('HTTPSが必要です'); return; }
     if (!('xr' in navigator)){ disable('WebXR未対応のブラウザです'); return; }
@@ -49,7 +49,7 @@ async function prepareARButton(){
     startBtn.disabled=false; startBtn.title='ARを開始'; startBtn.textContent='AR開始';
   }catch(e){ disable('AR初期化エラー: '+(e?.message||e)); }
 }
-prepareARButton();
+prepareARButton(); updateCanvasPointer();
 
 // three.js basics
 const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true, alpha:true});
@@ -170,7 +170,7 @@ const PRESET_KEY='flightObserver.presets';
 function getPresets(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY)||'[]').concat(PRESETS_DEFAULT);}catch{ return PRESETS_DEFAULT; } }
 function renderPresetSelect(){ const sel=document.getElementById('preset'); if(!sel) return; sel.innerHTML=''; getPresets().forEach((p,i)=>{ const o=document.createElement('option'); o.value=String(i); o.textContent=p.name; sel.appendChild(o);}); }
 function applyPreset(idx){ const p=getPresets()[Number(idx)]; if(!p) return; document.getElementById('lat').value=String(p.lat); document.getElementById('lon').value=String(p.lon); document.getElementById('radius').value=String(p.radius); refresh(); }
-document.getElementById('preset')?.addEventListener('change', (e)=>applyPreset(e.target.value));
+(function(){ const sel=document.getElementById('preset'); if(sel){ sel.addEventListener('change', ()=> applyPreset(sel.value)); } })();
 document.getElementById('savePreset')?.addEventListener('click', ()=>{ const mine=JSON.parse(localStorage.getItem(PRESET_KEY)||'[]'); mine.unshift({ name:`My Spot ${new Date().toLocaleString()}`, lat:Number(latI.value), lon:Number(lonI.value), radius:Number(radI.value) }); localStorage.setItem(PRESET_KEY, JSON.stringify(mine.slice(0,20))); renderPresetSelect(); });
 renderPresetSelect();
 
@@ -333,8 +333,8 @@ async function startAR(){
     try{ reticle=new THREE.Mesh(new THREE.RingGeometry(0.07,0.09,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x44ff88, transparent:true, opacity:0.85 })); reticle.visible=false; scene.add(reticle);}catch{}
     ensureHUD();
     console.log('domOverlayState=', session.domOverlayState?.type, 'presenting=', renderer.xr.isPresenting);
-    useAR=true; animateAR(session);
-    session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; });
+    useAR=true; updateCanvasPointer(); animateAR(session);
+    session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; updateCanvasPointer(); });
   }catch(e){ alert('AR開始に失敗しました: '+(e?.message||e)); }
 }
 function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame && hitTestSource){ try{ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { if(reticle) reticle.visible=false; } }catch{} } updateLabelScales(); renderer.render(scene,camera); }); }
@@ -346,3 +346,11 @@ function genDemoStates(center, n=6){ const out=[]; for(let i=0;i<n;i++){ const a
 refresh();
 
 \n// Pre-warm microphone permission on mic button (Quest Browser)\nasync function prewarmMic(){ try{ const s=await navigator.mediaDevices?.getUserMedia?.({audio:true}); const ctx = new (window.AudioContext||window.webkitAudioContext)(); await ctx.resume(); console.log('Mic OK', s?.getAudioTracks?.()[0]?.label||''); }catch(e){ console.warn('Mic NG', e?.name||'', e?.message||''); } }\n
+
+
+
+function updateCanvasPointer(){ try{ if(!c) return; c.style.pointerEvents = useAR ? 'auto' : 'none'; }catch{} }
+
+
+
+
