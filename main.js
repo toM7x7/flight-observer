@@ -19,7 +19,7 @@ document.getElementById('demoBtn')?.addEventListener('click', ()=> runDemo(3));
 function runDemo(n=3){
   const lat=Number(latI.value), lon=Number(lonI.value);
   lastStates = genDemoStates({lat,lon}, n);
-  $('#src').textContent=`source: demo | flights: ${lastStates.length}`;
+  $('#src').textContent=`ソース: demo | 便数: ${lastStates.length}`;
   placeMarkers({lat,lon}, lastStates);
   selectedIdx = -1;
   renderList(lastStates);
@@ -30,14 +30,14 @@ function runDemo(n=3){
 const startBtn = document.getElementById('startAR');
 async function prepareARButton(){
   if(!startBtn) return;
-  const disable = (msg)=>{ startBtn.disabled=true; startBtn.title=msg; startBtn.textContent = 'START AR (unavailable)'; };
+  const disable = (msg)=>{ startBtn.disabled=true; startBtn.title=msg; startBtn.textContent = 'START AR（利用不可）'; };
   try{
-    if (!window.isSecureContext){ disable('HTTPS required'); return; }
-    if (!('xr' in navigator)){ disable('WebXR not supported'); return; }
+    if (!window.isSecureContext){ disable('HTTPSが必要です'); return; }
+    if (!('xr' in navigator)){ disable('WebXR未対応のブラウザです'); return; }
     const ok = await navigator.xr?.isSessionSupported?.('immersive-ar');
-    if (ok === false){ disable('immersive-ar unsupported'); return; }
-    startBtn.disabled=false; startBtn.title='Start AR'; startBtn.textContent='START AR';
-  }catch(e){ disable('AR init error: '+(e?.message||e)); }
+    if (ok === false){ disable('immersive-ar未対応の環境です'); return; }
+    startBtn.disabled=false; startBtn.title='ARを開始'; startBtn.textContent='START AR';
+  }catch(e){ disable('AR初期化エラー: '+(e?.message||e)); }
 }
 prepareARButton();
 
@@ -55,6 +55,8 @@ addEventListener('resize', ()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
+
+function toggleView(){ grid.visible = !grid.visible; }
 
 // State
 let lastStates = [];
@@ -99,6 +101,9 @@ document.getElementById('savePreset')?.addEventListener('click', ()=>{ const min
 renderPresetSelect();
 
 // Fetch + render
+let _refreshTimer = null;
+function scheduleRefresh(ms=250){ clearTimeout(_refreshTimer); _refreshTimer = setTimeout(()=>refresh(), ms); }
+
 async function refresh(){
   const lat=Number(latI.value), lon=Number(lonI.value), radius=Number(radI.value||30);
   const url=`${CONFIG.FLIGHT_ENDPOINT}?lat=${lat}&lon=${lon}&radius_km=${radius}`;
@@ -109,7 +114,7 @@ async function refresh(){
     const j=await r.json();
     console.log('nearby resp:', j?.states?.length, j?.degraded?'degraded':'' , j?.debug||'');
     lastStates=j.states||[];
-    $('#src').textContent=`source: opensky | flights: ${lastStates.length}`;
+    $('#src').textContent=`ソース: opensky | 便数: ${lastStates.length}`;
     placeMarkers({lat,lon}, lastStates);
     selectedIdx = -1;
     renderList(lastStates);
@@ -117,14 +122,14 @@ async function refresh(){
     if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera));
   }catch(e){
     console.error('fetch failed', e);
-    alert('Live fetch failed. Falling back to DEMO (3 flights).');
+    alert('ライブ取得に失敗しました。DEMO（3機）に切り替えます。');
     runDemo(3);
   }
 }
 
 function renderList(states){
   const box=$('#list'); if(!box) return;
-  box.innerHTML='<h3>Flights</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join('');
+  box.innerHTML='<h3>フライト一覧</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join('');
   box.querySelectorAll('.item').forEach(el=>el.addEventListener('click',async()=>{
     const idx=Number(el.getAttribute('data-idx'));
     selectedIdx = (selectedIdx===idx ? -1 : idx);
@@ -147,24 +152,37 @@ function applySelectionEffects(){
   const title = s.callsign || '(unknown)';
   info.innerHTML = `<div class='card'>
     <div class='title'>${title}</div>
-    <div class='row'>Alt: ${alt} m</div>
-    <div class='row'>Spd: ${spdKt} kt</div>
-    <div class='row'>Hdg: ${hdg}°</div>
+    <div class='row'>高度: ${alt} m</div>
+    <div class='row'>速度: ${spdKt} kt</div>
+    <div class='row'>方位: ${hdg}°</div>
   </div>`;
 }
+
+// Map-like panning and zoom
+let isPanning=false; let panStart={x:0,y:0}; let panBase={lat:0,lon:0};
+function onPointerDown(ev){ try{ c.setPointerCapture(ev.pointerId); }catch{} isPanning=true; panStart={x:ev.clientX,y:ev.clientY}; panBase={lat:Number(latI.value)||0, lon:Number(lonI.value)||0}; c.style.cursor='grabbing'; }
+function onPointerMove(ev){ if(!isPanning) return; const dx=ev.clientX-panStart.x; const dy=ev.clientY-panStart.y; const radius=Number(radI.value||30); const width=innerWidth, height=innerHeight; const kmPerPxX=(2*radius)/Math.max(1,width); const kmPerPxY=(2*radius)/Math.max(1,height); const dKmX=dx*kmPerPxX; const dKmY=-dy*kmPerPxY; const Rlat=111.132; const Rlon=111.320*Math.cos(panBase.lat*Math.PI/180); const dlat=dKmY/Rlat; const dlon=dKmX/Math.max(1e-6,Rlon); latI.value=String(panBase.lat + dlat); lonI.value=String(panBase.lon + dlon); // reposition markers for current center
+  placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates);
+}
+function onPointerUp(ev){ if(!isPanning) return; isPanning=false; c.style.cursor='grab'; try{ c.releasePointerCapture(ev.pointerId);}catch{} scheduleRefresh(150); }
+function onWheel(ev){ ev.preventDefault(); let r=Number(radI.value||30); const f = ev.deltaY>0? 1.12 : 0.89; r=Math.round(THREE.MathUtils.clamp(r*f,5,200)); radI.value=String(r); scheduleRefresh(200); }
+addEventListener('keydown',(e)=>{ const r=Number(radI.value||30); const stepKm=r*0.2; const lat0=Number(latI.value), lon0=Number(lonI.value); const Rlat=111.132; const Rlon=111.320*Math.cos(lat0*Math.PI/180); let dlat=0, dlon=0; if(e.key==='ArrowUp') dlat= stepKm/Rlat; else if(e.key==='ArrowDown') dlat= -stepKm/Rlat; else if(e.key==='ArrowLeft') dlon= -stepKm/Math.max(1e-6,Rlon); else if(e.key==='ArrowRight') dlon= stepKm/Math.max(1e-6,Rlon); else return; latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); scheduleRefresh(120); });
+
+// attach pointer handlers to canvas
+if (c){ c.addEventListener('pointerdown', onPointerDown); c.addEventListener('pointermove', onPointerMove); c.addEventListener('pointerup', onPointerUp); c.addEventListener('pointercancel', onPointerUp); c.addEventListener('wheel', onWheel, { passive:false }); }
 
 // Ask (region-first)
 const askBtn=$('#ask');
 if(askBtn) askBtn.onclick=async ()=>{
   const qEl=$('#q'); const speakEl=$('#speak');
-  const q=(qEl?.value||'').trim(); if(!q){ appendLog('Please enter a question'); return; }
+  const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; }
   const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) };
   const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined;
   try{
     const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })});
     const { text }=await g.json(); appendLog(text||'(no response)');
     if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); }
-  }catch(e){ console.error('ask failed', e); appendLog('Error: '+(e?.message||e)); }
+  }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); }
 };
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
@@ -172,9 +190,9 @@ function appendLog(m){ const el=document.getElementById('log'); if(!el) return; 
 let reticle=null; let hitTestSource=null; let viewerSpace=null;
 async function startAR(){
   try{
-    if(!navigator.xr){ alert('WebXR not supported by this browser'); return; }
+    if(!navigator.xr){ alert('WebXR未対応のブラウザです'); return; }
     const ok = await navigator.xr.isSessionSupported?.('immersive-ar');
-    if(ok===false){ alert('immersive-ar not supported in this environment'); return; }
+    if(ok===false){ alert('immersive-ar未対応の環境です'); return; }
     let session;
     try{
       const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hit-test'], domOverlay:{ root: overlayRoot } };
@@ -194,7 +212,7 @@ async function startAR(){
 
     useAR=true; animateAR(session);
     session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; });
-  }catch(e){ console.error('startAR failed', e); alert('Failed to start AR: '+(e?.message||e)); }
+  }catch(e){ console.error('startAR failed', e); alert('AR開始に失敗しました: '+(e?.message||e)); }
 }
 
 function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame){ if(hitTestSource){ try{ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { if(reticle) reticle.visible=false; } }catch{} } } updateLabelScales(); renderer.render(scene,camera); }); }
