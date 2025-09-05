@@ -1,49 +1,43 @@
-﻿# Flight Observer — AR Minimum Requirements and Fail‑Safes
+# Flight Observer | AR Minimums / Fail-Safes
 
-目的: 「飛んでいる飛行機を自由自在に観察して感動できる」体験を、壊れにくく提供する。
+目的: 「押したら確実に動く / すぐ復帰できる」ための最小要件と安全策を整理します。
 
-## Minimums（最低要件）
+## Minimums（最低ライン）
+- 配信: HTTPS（`window.isSecureContext === true`）
+- ブラウザ: Meta Quest Browser（最新）
+- WebXR: `navigator.xr` が存在し、`xr.isSessionSupported('immersive-ar') === true`
+- パーミッション: カメラ/空間/手（必要に応じて）を許可
+- three の読込: importmap で固定し、アプリ側は `import * as THREE from 'three'`
+- MIME: `Content-Type: text/javascript`（strict MIME でエラー回避）
+- ヘッダ: `Permissions-Policy: xr-spatial-tracking=(self)`（必要に応じて）
 
-- 配信: HTTPS（window.isSecureContext === true）
-- ブラウザ: Meta Quest Browser（最新）。デスクトップは開発用として Immersive Web Emulator で代用可
-- WebXR: 
-avigator.xr が存在、xr.isSessionSupported('immersive-ar') === true
-- パーミッション: サイトのカメラ/空間アクセスを許可（拒否→許可の再設定手順を提示）
-- JavaScriptモジュール: three を importmap で一意化（多重ロード警告が出ない）
-- 静的ファイル: Content-Type: text/javascript で提供（strict MIME type エラー回避）
-- ヘッダ（推奨）: Permissions-Policy: xr-spatial-tracking=(self)
+## Button Contract（AR開始ボタン）
+- 「AR開始」はユーザー操作中に `navigator.xr.requestSession('immersive-ar', opts)` を直接呼ぶ
+- `opts`
+  - `requiredFeatures: ['local-floor']`
+  - `optionalFeatures: ['dom-overlay','hand-tracking','hit-test']`
+- 非対応機能は無視される前提で UI は壊さない
+- 未対応/権限未許可/HTTPS でない等はボタン無効化＋理由をツールチップ表示
 
-## Button Contract（START ARの契約）
+## Fail-Safes（失敗時の安全策）
+- AR開始失敗: ボタンを再度有効化、HUD/3D/DEMO のガイドを表示
+- Hit Test 不可: レティクル非表示、Place はカメラ前方 2m に配置
+- データ障害: `/api/nearby` はフォールバック（グローバル→ローカル絞り込み→空配200）
+- UI保護: DOM Overlay 操作中は `beforexrselect` で XR select を抑制、非対応は 3D カードで代替
 
-- START AR 押下（ユーザー操作内）で 
-avigator.xr.requestSession('immersive-ar', opts) を直接呼ぶ
-- opts: equiredFeatures: ['local-floor'], optionalFeatures: ['dom-overlay','hand-tracking','hit-test']
-- 失敗時は理由をUIに明示（未対応/許可なし/HTTPSでない等）
-- サポート判定の結果でボタンを無効化し、タイトルに理由を表示
+## Troubleshooting（確認観点）
+1) Console に `isPresenting`, `domOverlayState`, `inputSources` を出せているか
+2) three の二重ロードなし（importmap を確認）
+3) `/api/nearby?...&debug=1`（bbox/token/x-cache）で上流状況を確認
+4) サイト権限（カメラ/空間/手）の再許可
 
-## Fail‑Safes（破綻保障）
+## UI（AR / Browser）
+- HUD: Place / Follow / Chat / Hide（最小の頭部追従ツールバー）
+- Dock: ワールド内に固定できるカード状 UI
+- 入力: 片手ピンチ=移動、両手ピンチ=スケール（離したら refresh）
+- リスト: クリック or レイで選択、ミニカードと 3D ハイライト
 
-- AR開始不可: ボタン無効化（理由表示）＋ブラウザ3D/HUD/DEMOで代替
-- Hit Test不可: レティクル非表示→Placeは前方2mに配置
-- データ失敗: /api/nearby はフォールバック（グローバル→ローカル絞り込み→空配列200）でUIを止めない
-- UI競合: DOM Overlay操作時は eforexrselect でXR selectを抑止／未対応時は3Dカードへ
-
-## Troubleshooting（切り分け）
-
-1) Consoleに isPresenting, domOverlayState, inputSources が出るか
-2) three の多重ロード警告が出ていないか（importmapを確認）
-3) /api/nearby?...&debug=1 の応答（bbox/token/x-cache/件数）
-4) サイトの権限（カメラ/空間）を再許可
-
-## 操作（AR / Browser）
-
-- HUD: Place / Follow / Chat / Hide（頭部追従）
-- Dock: 置いた後はワールド固定の小カードで最小表示
-- ピンチ: 片手=中心座標の移動、両手=半径の拡縮（解除でrefresh）
-- リスト: クリックで選択/非選択、右下にミニカード、3Dハイライト
-
-## 目的（常に戻る）
-
-- 空を“邪魔しない”UI（HUD主装備、必要な時だけカード）
-- 自由に“置ける/戻せる/話せる”操作（Place/Follow/Chat）
-- 失敗しても止まらない（Fail‑Safes とデバッグ導線）
+## 目標（段階的）
+- 説明がなくても迷わない HUD（最少の語彙、必要十分なカード）
+- “置く/追従/チャット” の 3 モードを明確化
+- 失敗しても詰まらない（Fail-Safes とデバッグ導線）

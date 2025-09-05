@@ -1,42 +1,69 @@
-﻿# Flight Observer (WebXR + Three.js + Gemini + Aivis)
+# Flight Observer (WebXR + Three.js + Gemini + Aivis)
 
-遨ｺ縺ｮ莉翫ｒ隕九※繝ｻ閨槭＞縺ｦ繝ｻ隗ｦ繧後ｋ縲ゅヶ繝ｩ繧ｦ繧ｶ縺縺代〒蜻ｨ霎ｺ縺ｮ繝輔Λ繧､繝医ｒ蜿ｯ隕門喧縺励、R荳翫〒AI縺ｫ雉ｪ蝠上・髻ｳ螢ｰ蠢懃ｭ斐＠縺ｪ縺後ｉ縲∵焔繧・さ繝ｳ繝医Ο繝ｼ繝ｩ縺ｧ謫堺ｽ懊〒縺阪∪縺吶・
-AR繝｢繝ｼ繝峨・隧ｳ邏ｰ縺ｪ險ｺ譁ｭ繝ｻ蟇ｾ蜃ｦ繧ｬ繧､繝峨・ `docs/AR.md` 繧貞盾辣ｧ縺励※縺上□縺輔＞・・eta Quest Browser蟇ｾ蠢懊．OM Overlay繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ縲∵焔/繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ蜈･蜉帙？it-test驟咲ｽｮ縺ｪ縺ｩ繧堤ｶｲ鄒・ｼ峨・
-## 繝・・繝ｭ繧､・・itHub 竊・Vercel・・1. 繝ｪ繝昴ず繝医Μ繧・GitHub 縺ｫ push
-2. Vercel Dashboard 竊・Import Project 竊・GitHub 縺九ｉ蠖楢ｩｲ繝ｪ繝昴ず繝医Μ繧帝∈謚橸ｼ・ramework 縺ｯ 窶廾ther窶晢ｼ・3. Project Settings 竊・Environment Variables 繧定ｨｭ螳・   - `GEMINI_API_KEY` = <your gemini api key>
-   - `AIVIS_API_KEY`  = <your aivis api key>
-   - `AIVIS_BASE_URL` = https://api.aivis-project.com・育怐逡･蜿ｯ・・   - ・井ｻｻ諢乗耳螂ｨ・荏OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`・・penSky OAuth2・・   - ・井ｻｻ諢擾ｼ荏GOOGLE_API_KEY`, `GOOGLE_CSE_ID`・・eb讀懃ｴ｢逕ｨ・・4. Deploy 竊・`https://<project>.vercel.app` 縺檎匱陦後＆繧後∪縺・
-## 菴ｿ縺・婿・・eb/Quest・・- 荳企Κ UI 縺ｧ `lat / lon / radius` 繧貞・蜉帙＠縺ｦ縲悟叙蠕励・- 蜿ｳ縺ｮ繝ｪ繧ｹ繝医〒繝輔Λ繧､繝医ｒ繧ｯ繝ｪ繝・け 竊・Gemini 隕∫せ逕滓・ 竊・Aivis 隱ｭ縺ｿ荳翫￡
-- Quest 縺ｮ Meta Browser 縺ｧ縲郡TART AR縲坂・ 繝代せ繧ｹ繝ｫ繝ｼAR・医き繝｡繝ｩ險ｱ蜿ｯ蠢・茨ｼ・- 逕ｻ髱｢荳九・繧ｪ繝ｼ繝舌・繝ｬ繧､縺九ｉ雉ｪ蝠上☆繧九→縲・∈謚槭↑縺励〒繧ゅ悟慍蝓溘・遨ｺ縲阪ｒ譁・ц縺ｫ蝗樒ｭ費ｼ亥ｿ・ｦ∵凾縺ｯWeb讀懃ｴ｢繧ょｮ溯｡鯉ｼ・
-## 繝ｭ繝ｼ繧ｫ繝ｫ髢狗匱
-- `npm i` 竊・`vercel dev`
+空の今を見て・聞いて・触れる。ブラウザだけで周辺のフライトを可視化し、AR上でAIに質問・音声応答しながら、手・コントローラで操作できます。Meta Quest Browser 対応（DOM Overlay フォールバック、手/コントローラ入力、Hit Test 配置）。
 
-## 荳ｻ縺ｪ讖溯・
-- 繧ｨ繝ｪ繧｢繝ｻ繝励Μ繧ｻ繝・ヨ: `select#preset` 縺ｨ縲鯉ｼ狗樟蝨ｨ蝨ｰ繧剃ｿ晏ｭ倥阪よ里螳壹せ繝昴ャ繝茨ｼ義localStorage` 菫晏ｭ假ｼ井ｸ企剞20莉ｶ・・- ARﾃ輸I蟇ｾ隧ｱ・・OM Overlay・・ WebXR DOM Overlay 荳翫↓繝√Ε繝・ヨUI繧帝㍾縺ｭ縲∬ｳｪ蝠鞘・Gemini 蠢懃ｭ披・Aivis縺ｧ隱ｭ縺ｿ荳翫￡
-- 蜈･蜉・ 蜿ｳsqueeze=諡｡螟ｧ縲∝ｷｦsqueeze=邵ｮ蟆上∫援謇九ヴ繝ｳ繝・荳贋ｸ狗ｧｻ蜍輔∽ｸ｡謇九ヴ繝ｳ繝・諡｡邵ｮ縲ょｷｦ繧ｹ繝・ぅ繝・けY縺ｧ鬮伜ｺｦ隱ｿ謨ｴ
+- AR の詳しい診断・運用ガイド: `docs/AR.md`
+- 最小要件 / Fail-Safes: `docs/AR_MINIMUMS.md`
 
-## 繝舌ャ繧ｯ繧ｨ繝ｳ繝牙ｼｷ蛹厄ｼ・penSky繝ｻAsk API繝ｻ讀懃ｴ｢・・- OpenSky `/api/nearby` 縺ｯ bbox + SWR + ・井ｻｻ諢擾ｼ碓Auth2縲ょ諺蜷阪〒繧ょ虚菴懊＠縲∽ｸ頑ｵ∝､ｱ謨玲凾縺ｯ縲後げ繝ｭ繝ｼ繝舌Ν蜿門ｾ励〒繝輔ぅ繝ｫ繧ｿ縲坂・縲檎ｩｺ驟榊・200霑泌唆縲阪↓繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ・・I縺梧ｭ｢縺ｾ繧峨↑縺・ｼ・- 譁ｰ隕・`/api/ask` 縺ｧ讖滉ｽ捺悴驕ｸ謚槭〒繧ょ慍蝓滓枚閼医〒蝗樒ｭ斐ょｿ・ｦ∵凾縺縺・Web 讀懃ｴ｢・・oogle Programmable Search・峨ｒ陦後＞縲∝・蜈ｸ繧呈ｷｻ縺医※蠢懃ｭ・
-## 蜿り・Μ繝ｳ繧ｯ
-- WebXR DOM Overlay: https://www.w3.org/TR/webxr-dom-overlays-1/
-- XRSession.domOverlayState / beforexrselect: https://developer.mozilla.org/en-US/docs/Web/API/XRSession/domOverlayState
-- WebXR Hand Input (XRHand): https://www.w3.org/TR/webxr-hand-input-1/
-- XRSession squeeze: https://developer.mozilla.org/en-US/docs/Web/API/XRSession/squeeze_event
-- WebXR Hit Test: https://www.w3.org/TR/webxr-hit-test-1/
-- three.js AR Hit Test: https://threejs.org/examples/webxr_ar_hittest.html
-- WebXR Device API Inputs: https://developer.mozilla.org/en-US/docs/Web/API/WebXR_Device_API/Inputs
-- Meta WebXR Hands: https://developers.meta.com/horizon/documentation/web/webxr-hands/
+## デプロイ（GitHub → Vercel）
+1. リポジトリを GitHub に push
+2. Vercel Dashboard → Import Project → GitHub リポジトリを選択（Framework は “Other”）
+3. Project Settings → Environment Variables を設定
+   - `GEMINI_API_KEY`（Gemini API）
+   - `AIVIS_API_KEY` / `AIVIS_BASE_URL`（Aivis TTS）
+   - 任意推奨: `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET`（OpenSky OAuth2）
+   - 任意: `GOOGLE_API_KEY` / `GOOGLE_CSE_ID`（Web 検索）
+4. Deploy → `https://<project>.vercel.app` が発行
 
-荳榊・蜷医・繧ｳ繝ｳ繧ｽ繝ｼ繝ｫ/Network繝ｭ繧ｰ繧呈ｷｻ縺医※ Issue/PR 繧偵♀鬘倥＞縺励∪縺吶・R/繝・・繧ｿ蜿門ｾ励・謖吝虚縺ｯ繝・ヰ繧､繧ｹ繝ｻ繝悶Λ繧ｦ繧ｶ繝ｻ荳頑ｵ、PI縺ｮ螳溯｣・憾豕√↓萓晏ｭ倥＠縺ｾ縺吶・
-## 謚陦薙せ繧ｿ繝・け / 險ｭ險域婿驥晢ｼ域峩譁ｰ・・
-- WebXR: three.js WebXRManager・・uest Browser・峨Ａimmersive-ar` + `local-floor` + `hit-test`
-- UI: DOM Overlay・亥ｯｾ蠢懈凾・・ 3D繝代ロ繝ｫ・磯撼蟇ｾ蠢懈凾繝輔か繝ｼ繝ｫ繝舌ャ繧ｯ・・- 蜈･蜉・ hand-tracking・・RHand縲∫援謇九ヴ繝ｳ繝・荳贋ｸ九∽ｸ｡謇九ヴ繝ｳ繝・諡｡邵ｮ・・ 繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ・・queeze/繧ｹ繝・ぅ繝・け・・- 3D蜿ｯ隕門喧: 繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ繝｢繝・Ν・・RControllerModelFactory・・ 繝ｬ繧､陦ｨ遉ｺ + 繝ｬ繝・ぅ繧ｯ繝ｫ・・it-test辣ｧ貅厄ｼ・- 繝・・繧ｿ: OpenSky `/states/all` 繧・bbox 縺ｧ蜿門ｾ励ヾWR繧ｭ繝｣繝・す繝･縲∵欠謨ｰ繝舌ャ繧ｯ繧ｪ繝輔√ヵ繧ｩ繝ｼ繝ｫ繝舌ャ繧ｯ・医げ繝ｭ繝ｼ繝舌Ν竊偵Ο繝ｼ繧ｫ繝ｫ邨槭ｊ霎ｼ縺ｿ竊堤ｩｺ驟榊・200・・- AI: Gemini 2.x・郁ｦ∫せ/莨夊ｩｱ・・ Aivis・・TS・峨ゆｻｻ諢上〒 Google CSE 繧剃ｽｿ縺｣縺欷eb讀懃ｴ｢繝・・繝ｫ
+## 使い方（Web/Quest 共通）
+- 上部 UI で中心 `lat / lon` と `半径(km)` を設定 → 取得
+- 右のフライト一覧をクリックすると要約（Gemini）を表示（読み上げ ON で音声再生）
+- DEMO ボタンでサンプル 3 機を即表示（取得失敗時も自動フォールバック）
+- マップ操作（キャンバス上）
+  - ドラッグ: パン / ホイール: ズーム（半径変更） / 矢印キー: パン
+  - パン速度・ズーム感度は UI のスライダーで調整
+- 高度表示
+  - GNSS(geo) / 気圧(baro) / AGL(地表差) の切替
+  - 誇張スライダー（高さの見かけ倍率、表示は基準比 x1.xx）
+  - 地面高度(m) は「自動取得」で中心座標の標高を反映（SRTM/Open‑Elevation）
 
-## Known Issues / 豕ｨ諢丈ｺ矩・
-- three 縺ｮ莠碁㍾繝ｭ繝ｼ繝峨・蜴ｳ遖・ｼ・aycast繧・け繝ｩ繧ｹ豈碑ｼ・′遐ｴ邯ｻ・峨Ｊmportmap 縺ｧ `three` 繧貞崋螳壹＠縲√い繝励Μ蛛ｴ縺ｯ `import * as THREE from 'three'` 繧剃ｽｿ逕ｨ縲・- START AR 縺ｯ蠢・★繝ｦ繝ｼ繧ｶ繝ｼ謫堺ｽ懶ｼ医け繝ｪ繝・け・牙・縺ｧ `requestSession('immersive-ar')` 繧貞他縺ｶ縲・- DOM Overlay 縺檎┌縺・腸蠅・〒縺ｯ 3D 繝代ロ繝ｫ繧剃ｽｿ逕ｨ縲Ｔelect 縺ｯ繝ｬ繧､繧ｭ繝｣繧ｹ繝医〒蜃ｦ逅・・- OpenSky 縺ｯ蛹ｿ蜷榊茜逕ｨ譎ゅ↓繝ｬ繝ｼ繝亥宛髯舌・繧ｿ繧､繝繧｢繧ｦ繝医′縺ゅｊ蠕励ｋ縲Ａ/api/nearby?...&debug=1` 縺ｧ險ｺ譁ｭ縲・
-## Quest 縺ｧ縺ｮ繝ｭ繧ｰ蜿朱寔
+## AR モード（Meta Quest Browser）
+- 「AR開始」を押す → パススルー AR に切替（HTTPS 必須 / 権限許可）
+- DOM Overlay 対応時は下部にチャット UI、非対応時は 3D パネルに自動フォールバック
+- 3D 空間でフライトを棒グラフ的に表示（高度×誇張 / モード別色）
 
-1. 髢狗匱閠・Δ繝ｼ繝峨ｒON・・eta繧｢繝励Μ竊偵・繝・ラ繧ｻ繝・ヨ竊帝幕逋ｺ閠・Δ繝ｼ繝会ｼ・2. USB謗･邯壺・PC縺ｮChrome縺ｧ `chrome://inspect/#devices` 繧帝幕縺・3. Meta Quest Browser 縺ｮ繧ｿ繝悶ｒ Inspect 竊・Console/Network 繧貞叙蠕・4. 菴ｵ縺帙※ `https://<app>/api/health` 縺ｨ `/api/nearby?...&debug=1` 縺ｮ邨先棡繧貞・譛・
-## AR Minimums / Fail‑safes（必読）
+## ローカル開発
+```
+npm i
+vercel dev
+```
 
-docs/AR_MINIMUMS.md に「AR開始の最低要件」「START AR の契約」「破綻保障（Fail‑safes）」「切り分け手順」をまとめています。壊れやすい箇所（HTTPS/permissions/three多重ロード/strict MIME など）の再発防止にも使えます。
+## API（概要）
+- `GET /api/nearby?lat&lon&radius_km` 周辺フライト（OpenSky → SWR → フォールバック）
+- `POST /api/describe-flight` 機体要約（Gemini）
+- `POST /api/ask` 地域/機体に関する Q&A（必要に応じ Web 検索）
+- `POST /api/tts` テキスト読み上げ（Aivis）
+- `GET /api/elevation?lat&lon` 中心標高の自動取得（SRTM/Open‑Elevation）
+- `GET /api/health` 環境診断
 
+## 設計メモ
+- WebXR: `immersive-ar` + `local-floor` + `hit-test`（optional）
+- UI: DOM Overlay → 非対応時は 3D パネルにフォールバック
+- 入力: ハンドトラッキング（ピンチ）/ コントローラ（squeeze/スティック）
+- 可視化: three.js（棒グラフ風マーカー＋ラベル、距離でラベルスケール）
+- データ: OpenSky `/states/all`（bbox/SWR/指数バックオフ/フォールバック）
+- AI: Gemini 2.x（要約/会話）+ Aivis TTS、任意で Google CSE 検索
+
+## Known Issues / 注意事項
+- three の二重ロードは禁止（importmap で固定し、`import * as THREE from 'three'` を使用）
+- AR 開始は必ずユーザー操作内で `navigator.xr.requestSession('immersive-ar')`
+- DOM Overlay が無い環境では 3D パネルで代替（`beforexrselect` で誤選択を抑制）
+- OpenSky は匿名利用時にレート制限/タイムアウトがあり得る → `/api/nearby?...&debug=1` で診断
+
+## Quest でのログ収集
+1. 開発者モード ON → PC Chrome の `chrome://inspect/#devices` から Quest Browser を Inspect
+2. Console/Network を採取、`/api/health` や `/api/nearby?...&debug=1` の結果も共有
+
+---
+
+詳しい AR の手順やトラブル対応は `docs/AR.md` を参照してください。
