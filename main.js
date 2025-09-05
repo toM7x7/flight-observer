@@ -324,10 +324,15 @@ async function startAR(){
         else if(a==='east'){ adjustCenterByKm(0,0.5); }
       } };
       ctrl0.addEventListener('select', onSelect); ctrl1.addEventListener('select', onSelect);
+      ctrl0.addEventListener('selectstart', onSelect); ctrl1.addEventListener('selectstart', onSelect);
+      // squeeze for quick follow toggle
+      const onSqueeze=(e)=>{ followMode=!followMode; if(followChk) followChk.checked=followMode; };
+      ctrl0.addEventListener('squeeze', onSqueeze); ctrl1.addEventListener('squeeze', onSqueeze);
     }catch{}
     try{ if(session.requestReferenceSpace && session.requestHitTestSource){ viewerSpace=await session.requestReferenceSpace('viewer'); hitTestSource=await session.requestHitTestSource({ space: viewerSpace }); } }catch{}
     try{ reticle=new THREE.Mesh(new THREE.RingGeometry(0.07,0.09,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x44ff88, transparent:true, opacity:0.85 })); reticle.visible=false; scene.add(reticle);}catch{}
     ensureHUD();
+    console.log('domOverlayState=', session.domOverlayState?.type, 'presenting=', renderer.xr.isPresenting);
     useAR=true; animateAR(session);
     session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; });
   }catch(e){ alert('AR開始に失敗しました: '+(e?.message||e)); }
@@ -339,3 +344,5 @@ function genDemoStates(center, n=6){ const out=[]; for(let i=0;i<n;i++){ const a
 
 // Kick-off
 refresh();
+
+\n// Pre-warm microphone permission on mic button (Quest Browser)\nasync function prewarmMic(){ try{ const s=await navigator.mediaDevices?.getUserMedia?.({audio:true}); const ctx = new (window.AudioContext||window.webkitAudioContext)(); await ctx.resume(); console.log('Mic OK', s?.getAudioTracks?.()[0]?.label||''); }catch(e){ console.warn('Mic NG', e?.name||'', e?.message||''); } }\n
