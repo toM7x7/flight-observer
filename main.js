@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
@@ -148,8 +148,8 @@ function updateSelectionUI(){
     <div class='title'>${title}</div>
     <div class='row'>Altitude: ${altV} m</div>
     <div class='row'>Speed: ${spdKt} kt</div>
-    <div class='row'>Heading (true): ${hdg}°</div>
-    <div class='row'>Distance/Bearing (from center): ${dkm.toFixed(1)} km / ${brg}°</div>
+    <div class='row'>Heading (true): ${hdg}ﾂｰ</div>
+    <div class='row'>Distance/Bearing (from center): ${dkm.toFixed(1)} km / ${brg}ﾂｰ</div>
   </div>`;
   ensureGuideLine(); const m = [...markers.children].find(o=>o?.userData?.idx===selectedIdx); if (m && guideLine){ const arr=guideLine.geometry.attributes.position.array; arr[0]=0;arr[1]=0;arr[2]=0; arr[3]=m.position.x; arr[4]=0; arr[5]=m.position.z; guideLine.geometry.attributes.position.needsUpdate=true; guideLine.computeLineDistances?.(); guideLine.visible=true; }
 }
@@ -161,6 +161,8 @@ let guideLine=null; function ensureGuideLine(){ if(guideLine) return; const geo=
 const raycaster = new THREE.Raycaster();
 let hud=null, hudFocus=null, hudFollow=null, hudAsk=null, dirArrow=null;
 let hudRPlus=null, hudRMinus=null, hudNorth=null, hudSouth=null, hudEast=null, hudWest=null;
+let hudBg=null, hudPin=null, hudPlace=null; // new controls
+let hudPinned=false;
 const interactiveTargets=[];
 function makeHudButton(text, w=0.14, h=0.06){
   const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
@@ -176,25 +178,46 @@ function makeArrow(){
   const tex=new THREE.CanvasTexture(cvs); return new THREE.Mesh(new THREE.PlaneGeometry(0.08,0.08), new THREE.MeshBasicMaterial({map:tex,transparent:true}));
 }
 function ensureHUD(){ if(hud) return; hud=new THREE.Group();
-  hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.16,-0.08,0); hudFocus.userData.action='focus';
-  hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.0,-0.08,0); hudFollow.userData.action='follow';
-  hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.16,-0.08,0); hudAsk.userData.action='ask';
-  hudRPlus=makeHudButton('+R', 0.08, 0.05); hudRPlus.position.set(0.24,-0.08,0); hudRPlus.userData.action='radius+';
-  hudRMinus=makeHudButton('-R', 0.08, 0.05); hudRMinus.position.set(0.32,-0.08,0); hudRMinus.userData.action='radius-';
-  hudNorth=makeHudButton('N', 0.06, 0.06); hudNorth.position.set(-0.06,0.02,0); hudNorth.userData.action='north';
+  // background board (single panel feel)
+  const bgGeo=new THREE.PlaneGeometry(0.6, 0.28, 1, 1);
+  const bgMat=new THREE.MeshBasicMaterial({color:0x1a2735, transparent:true, opacity:0.9});
+  hudBg=new THREE.Mesh(bgGeo, bgMat); hudBg.position.set(0,-0.06,-0.001); hud.add(hudBg);
+
+  // primary row
+  hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.18,-0.06,0); hudFocus.userData.action='focus';
+  hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.0,-0.06,0); hudFollow.userData.action='follow';
+  hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.18,-0.06,0); hudAsk.userData.action='ask';
+
+  // secondary controls (radius, move)
+  hudRPlus=makeHudButton('+R', 0.08, 0.05); hudRPlus.position.set(0.24,-0.06,0); hudRPlus.userData.action='radius+';
+  hudRMinus=makeHudButton('-R', 0.08, 0.05); hudRMinus.position.set(0.32,-0.06,0); hudRMinus.userData.action='radius-';
+  hudPin=makeHudButton('Pin', 0.10, 0.05); hudPin.position.set(-0.28,-0.06,0); hudPin.userData.action='pin-toggle';
+  hudPlace=makeHudButton('Place', 0.12, 0.05); hudPlace.position.set(-0.28,0.06,0); hudPlace.userData.action='place-here';
+
+  // navigation nudge
+  hudNorth=makeHudButton('N', 0.06, 0.06); hudNorth.position.set(-0.06,0.06,0); hudNorth.userData.action='north';
   hudSouth=makeHudButton('S', 0.06, 0.06); hudSouth.position.set(-0.06,-0.18,0); hudSouth.userData.action='south';
-  hudWest =makeHudButton('W', 0.06, 0.06); hudWest .position.set(-0.13,-0.08,0); hudWest .userData.action='west';
-  hudEast =makeHudButton('E', 0.06, 0.06); hudEast .position.set( 0.01,-0.08,0); hudEast .userData.action='east';
-  dirArrow=makeArrow(); dirArrow.position.set(0,0.06,0);
-  hud.add(hudFocus); hud.add(hudFollow); hud.add(hudAsk); hud.add(hudRPlus); hud.add(hudRMinus);
-  hud.add(hudNorth); hud.add(hudSouth); hud.add(hudWest); hud.add(hudEast); hud.add(dirArrow);
+  hudWest =makeHudButton('W', 0.06, 0.06); hudWest .position.set(-0.13,-0.06,0); hudWest .userData.action='west';
+  hudEast =makeHudButton('E', 0.06, 0.06); hudEast .position.set( 0.01,-0.06,0); hudEast .userData.action='east';
+
+  dirArrow=makeArrow(); dirArrow.position.set(0,0.08,0);
+  [hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudNorth,hudSouth,hudWest,hudEast,dirArrow].forEach(x=>hud.add(x));
   scene.add(hud);
-  interactiveTargets.push(hudFocus, hudFollow, hudAsk, hudRPlus, hudRMinus, hudNorth, hudSouth, hudWest, hudEast);
+  interactiveTargets.push(hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudNorth,hudSouth,hudWest,hudEast);
+
   hud.onBeforeRender=()=>{
     const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
     const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
-    const pos=camPos.clone().add(camDir.multiplyScalar(0.8)); hud.position.copy(pos); hud.lookAt(camPos);
-    if(selectedIdx>=0){ const m=getMarkerObjectByIndex(selectedIdx); if(m){ const to=new THREE.Vector3().subVectors(m.position, new THREE.Vector3(0,0,0)); const camQ=new THREE.Quaternion(); camera.getWorldQuaternion(camQ); const invQ=camQ.clone().invert(); const local=to.clone().applyQuaternion(invQ); const ang=Math.atan2(local.x, -local.z); dirArrow.visible=true; dirArrow.rotation.z = -ang; } else { dirArrow.visible=false; } }
+    const camQ=new THREE.Quaternion(); camera.getWorldQuaternion(camQ);
+    const camUp=new THREE.Vector3(0,1,0).applyQuaternion(camQ);
+    // slightly below gaze
+    if(!hudPinned){
+      const pos=camPos.clone().add(camDir.multiplyScalar(0.9)).add(camUp.clone().multiplyScalar(-0.1));
+      hud.position.copy(pos);
+    }
+    hud.lookAt(camPos);
+    // Arrow to selected
+    if(selectedIdx>=0){ const m=getMarkerObjectByIndex(selectedIdx); if(m){ const to=new THREE.Vector3().subVectors(m.position, new THREE.Vector3(0,0,0)); const invQ=camQ.clone().invert(); const local=to.clone().applyQuaternion(invQ); const ang=Math.atan2(local.x, -local.z); dirArrow.visible=true; dirArrow.rotation.z = -ang; } else { dirArrow.visible=false; } }
     else { dirArrow.visible=false; }
   };
 }
@@ -332,6 +355,8 @@ async function startAR(){
         else if(a==='ask'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}).then(r=>r.json()).then(({text})=>{ appendLog(text||'(no response)'); }); } }
         else if(a==='radius+'){ const r=Number(radI.value||30); radI.value=String(Math.round(Math.min(200, r+2))); scheduleRefresh(0); }
         else if(a==='radius-'){ const r=Number(radI.value||30); radI.value=String(Math.round(Math.max(5, r-2))); scheduleRefresh(0); }
+        else if(a==='pin-toggle'){ hudPinned=!hudPinned; try{ const tex=hudPin?.material?.map; if(tex?.image){ const cvs=tex.image; const ctx=cvs.getContext('2d'); ctx.fillStyle='#22303a'; ctx.fillRect(0,0,256,128); ctx.strokeStyle='#4b6a84'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124); ctx.fillStyle='#cfe8ff'; ctx.font='bold 40px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(hudPinned?'Unpin':'Pin',128,64); tex.needsUpdate=true; } }catch{} }
+        else if(a==='place-here'){ try{ let pos=null; if(reticle&&reticle.visible){ pos=reticle.position.clone(); } else { const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos); const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir); const camQ=new THREE.Quaternion(); camera.getWorldQuaternion(camQ); const camUp=new THREE.Vector3(0,1,0).applyQuaternion(camQ); pos=camPos.clone().add(camDir.multiplyScalar(0.9)).add(camUp.clone().multiplyScalar(-0.1)); } hud.position.copy(pos); hudPinned=true; }catch{} }
         else if(a==='north'){ adjustCenterByKm(0.5,0); }
         else if(a==='south'){ adjustCenterByKm(-0.5,0); }
         else if(a==='west'){ adjustCenterByKm(0,-0.5); }
@@ -366,3 +391,4 @@ updateCanvasPointer();
 
 // Kick-off
 refresh();
+
