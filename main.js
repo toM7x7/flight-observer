@@ -241,7 +241,27 @@ if (c){ c.addEventListener('pointerdown', onPointerDown); c.addEventListener('po
 
 // Ask (region-first)
 const askBtn=$('#ask');
-if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const { text }=await g.json(); appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
+if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const resp=await g.json(); const text=resp?.text||''; if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{} appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
+function applyMapCommand(cmd){ try{
+  if(cmd.set_center){ const {lat,lon}=cmd.set_center; if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return; } }
+  if(cmd.adjust_center){ const {north_km=0,east_km=0}=cmd.adjust_center; const lat0=Number(latI.value), lon0=Number(lonI.value); const dlat = north_km/111.132; const dlon = east_km/(111.320*Math.cos(lat0*Math.PI/180)); latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); scheduleRefresh(0); return; }
+  if(cmd.set_radius){ const {km}=cmd.set_radius; if(Number.isFinite(km)){ radI.value=String(km); scheduleRefresh(0); return; } }
+  if(cmd.follow){ followMode = !!cmd.follow.on; if(followChk) followChk.checked=followMode; }
+}catch(e){ console.warn('map_command failed', e); }
+}
+
+// Voice input (Web Speech API, optional)
+const micBtn = document.getElementById('micBtn');
+if(micBtn){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ micBtn.title='音声入力は未対応のブラウザです'; micBtn.disabled=false; }
+  else{
+    const rec = new SR(); rec.lang='ja-JP'; rec.interimResults=false; rec.maxAlternatives=1;
+    rec.onresult = (e)=>{ const t=e.results?.[0]?.[0]?.transcript||''; if(t){ const qEl=$('#q'); if(qEl) qEl.value=t; askBtn?.click(); } };
+    rec.onerror = (e)=> appendLog('音声入力エラー: '+(e?.error||'unknown'));
+    micBtn.addEventListener('click', ()=>{ try{ rec.start(); appendLog('…録音中（話しかけてください）'); }catch{} });
+  }
+}
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
 // AR (minimal)
