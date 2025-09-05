@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
@@ -30,14 +30,14 @@ document.getElementById('demoBtn')?.addEventListener('click', ()=> runDemo(3));
 const startBtn = document.getElementById('startAR');
 async function prepareARButton(){
   if(!startBtn) return;
-  const disable = (msg)=>{ startBtn.disabled=false; startBtn.title=msg; startBtn.textContent='AR髢句ｧ・; };
+  const disable = (msg)=>{ startBtn.disabled=false; startBtn.title=msg; startBtn.textContent='Start AR'; };
   try{
-    if (!window.isSecureContext){ disable('HTTPS縺悟ｿ・ｦ√〒縺・); return; }
-    if (!('xr' in navigator)){ disable('WebXR譛ｪ蟇ｾ蠢懊・繝悶Λ繧ｦ繧ｶ縺ｧ縺・); return; }
+    if (!window.isSecureContext){ disable('HTTPS is required'); return; }
+    if (!('xr' in navigator)){ disable('WebXR not supported'); return; }
     const ok = await navigator.xr?.isSessionSupported?.('immersive-ar');
-    if (ok === false){ disable('immersive-ar譛ｪ蟇ｾ蠢懊・迺ｰ蠅・〒縺・); return; }
-    startBtn.disabled=false; startBtn.title='AR繧帝幕蟋・; startBtn.textContent='AR髢句ｧ・;
-  }catch(e){ disable('AR繝懊ち繝ｳ貅門ｙ繧ｨ繝ｩ繝ｼ: '+(e?.message||e)); }
+    if (ok === false){ disable('immersive-ar not supported'); return; }
+    startBtn.disabled=false; startBtn.title='Start AR'; startBtn.textContent='Start AR';
+  }catch(e){ disable('Failed to prepare AR button: '+(e?.message||e)); }
 }
 prepareARButton();
 
@@ -123,15 +123,15 @@ async function refresh(){
     // keep selection by key if present
     if(selectedKey){ const i1=lastStates.findIndex(s=>s.icao24===selectedKey || s.callsign===selectedKey); if(i1>=0) selectedIdx=i1; }
     const clat=Number(latI.value), clon=Number(lonI.value);
-    const src=document.getElementById('src'); if(src) src.textContent=`繧ｽ繝ｼ繧ｹ: opensky | 萓ｿ謨ｰ: ${lastStates.length}`;
+    const src=document.getElementById('src'); if(src) src.textContent=`Source: opensky | Flights: ${lastStates.length}`;
     placeMarkers({lat:clat,lon:clon}, lastStates);
     renderList(lastStates);
     updateSelectionUI();
     if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera));
-  }catch(e){ console.error('refresh failed', e); try{ alert('蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆縲・EMO縺ｫ蛻・ｊ譖ｿ縺医∪縺・); }catch{} runDemo(3); }
+  }catch(e){ console.error('refresh failed', e); try{ alert('Fetch failed. Switching to DEMO (3).'); }catch(_){} runDemo(3); }
 }
 
-function renderList(states){ const box=document.getElementById('list'); if(!box) return; box.innerHTML='<h3>繝輔Λ繧､繝井ｸ隕ｧ</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join(''); box.querySelectorAll('.item').forEach(el=>el.addEventListener('click', async ()=>{ const idx=Number(el.getAttribute('data-idx')); selectedIdx = (selectedIdx===idx ? -1 : idx); const s=states[idx]; selectedKey = s?.icao24 || s?.callsign || null; updateSelectionUI(); if(!s) return; try{ const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}); if(!g.ok){ const t=await g.text(); appendLog('要約失敗: '+t.slice(0,200)); return; } const {text}=await g.json(); appendLog(text||'(no response)'); }catch(e){ console.warn('describe failed', e);} })); }
+function renderList(states){ const box=document.getElementById('list'); if(!box) return; box.innerHTML='<h3>Flights</h3>' + (states||[]).map((s,i)=>`<div class="item" data-idx="${i}"><span>${s.callsign||'(unknown)'}</span><span>#${i+1}</span></div>`).join(''); box.querySelectorAll('.item').forEach(el=>el.addEventListener('click', async ()=>{ const idx=Number(el.getAttribute('data-idx')); selectedIdx = (selectedIdx===idx ? -1 : idx); const s=states[idx]; selectedKey = s?.icao24 || s?.callsign || null; updateSelectionUI(); if(!s) return; try{ const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}); if(!g.ok){ const t=await g.text(); appendLog('Summarization failed: '+t.slice(0,200)); return; } const {text}=await g.json(); appendLog(text||'(no response)'); }catch(e){ console.warn('describe failed', e); appendLog('Summarization error: '+(e?.message||e)); } })); }
 
 function updateSelectionUI(){
   // markers highlight
@@ -146,10 +146,10 @@ function updateSelectionUI(){
   const title = s.callsign || '(unknown)';
   info.innerHTML = `<div class='card'>
     <div class='title'>${title}</div>
-    <div class='row'>鬮伜ｺｦ: ${altV} m</div>
-    <div class='row'>騾溷ｺｦ: ${spdKt} kt</div>
-    <div class='row'>譁ｹ菴・逵滓婿菴・: ${hdg}ﾂｰ</div>
-    <div class='row'>霍晞屬/譁ｹ菴・荳ｭ蠢・°繧・: ${dkm.toFixed(1)} km / ${brg}ﾂｰ</div>
+    <div class='row'>Altitude: ${altV} m</div>
+    <div class='row'>Speed: ${spdKt} kt</div>
+    <div class='row'>Heading (true): ${hdg}°</div>
+    <div class='row'>Distance/Bearing (from center): ${dkm.toFixed(1)} km / ${brg}°</div>
   </div>`;
   ensureGuideLine(); const m = [...markers.children].find(o=>o?.userData?.idx===selectedIdx); if (m && guideLine){ const arr=guideLine.geometry.attributes.position.array; arr[0]=0;arr[1]=0;arr[2]=0; arr[3]=m.position.x; arr[4]=0; arr[5]=m.position.z; guideLine.geometry.attributes.position.needsUpdate=true; guideLine.computeLineDistances?.(); guideLine.visible=true; }
 }
@@ -224,7 +224,7 @@ followChk?.addEventListener('change', ()=>{ followMode = !!followChk.checked; if
 altModeSel?.addEventListener('change', ()=>{ altMode = altModeSel.value||'geo'; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); updateSelectionUI(); });
 altScaleInp?.addEventListener('input', ()=>{ altScale = Number(altScaleInp.value)||ALT_SCALE_BASE; if(altScaleVal){ const r=altScale/ALT_SCALE_BASE; altScaleVal.textContent = `x${r.toFixed(2)}`; } placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); updateSelectionUI(); });
 groundElevInp?.addEventListener('change', ()=>{ groundElev = Number(groundElevInp.value)||0; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); updateSelectionUI(); });
-autoElevBtn?.addEventListener('click', async ()=>{ try{ const lat=Number(latI.value), lon=Number(lonI.value); const r=await fetch(`/api/elevation?lat=${lat}&lon=${lon}`); const j=await r.json(); if(Number.isFinite(j?.elevation)){ groundElev = j.elevation; if(groundElevInp) groundElevInp.value=String(Math.round(groundElev)); placeMarkers({lat,lon}, lastStates); updateSelectionUI(); appendLog(`蝨ｰ髱｢鬮伜ｺｦ繧・${Math.round(groundElev)} m 縺ｫ險ｭ螳壹＠縺ｾ縺励◆`); } else { appendLog('蝨ｰ髱｢鬮伜ｺｦ縺ｮ蜿門ｾ励↓螟ｱ謨励＠縺ｾ縺励◆'); } }catch(e){ appendLog('蝨ｰ髱｢鬮伜ｺｦ縺ｮ蜿門ｾ励〒繧ｨ繝ｩ繝ｼ'); } });
+autoElevBtn?.addEventListener('click', async ()=>{ try{ const lat=Number(latI.value), lon=Number(lonI.value); const r=await fetch(`/api/elevation?lat=${lat}&lon=${lon}`); const j=await r.json(); if(Number.isFinite(j?.elevation)){ groundElev = j.elevation; if(groundElevInp) groundElevInp.value=String(Math.round(groundElev)); placeMarkers({lat,lon}, lastStates); updateSelectionUI(); appendLog(`Ground elevation set to ${Math.round(groundElev)} m.`); } else { appendLog('Failed to get ground elevation'); } }catch(e){ appendLog('Error getting ground elevation'); } });
 panSpeedInp?.addEventListener('input', ()=>{ panSpeed = Number(panSpeedInp.value)||1; if(panSpeedVal) panSpeedVal.textContent = `x${panSpeed.toFixed(1)}`; });
 zoomSpeedInp?.addEventListener('input', ()=>{ zoomSpeed = Number(zoomSpeedInp.value)||1; if(zoomSpeedVal) zoomSpeedVal.textContent = `x${zoomSpeed.toFixed(1)}`; });
 
@@ -232,19 +232,19 @@ zoomSpeedInp?.addEventListener('input', ()=>{ zoomSpeed = Number(zoomSpeedInp.va
 const askBtn=$('#ask');
 if(askBtn) askBtn.onclick=async ()=>{
   const qEl=$('#q'); const speakEl=$('#speak');
-  const q=(qEl?.value||'').trim(); if(!q){ appendLog('雉ｪ蝠上ｒ蜈･蜉帙＠縺ｦ縺上□縺輔＞'); return; }
+  const q=(qEl?.value||'').trim(); if(!q){ appendLog('Please enter a question'); return; }
   askBtn.disabled=true;
   const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) };
   const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined;
   try{
     const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })});
-    if(!g.ok){ const t=await g.text(); appendLog('Ask螟ｱ謨・ '+t); return; }
+    if(!g.ok){ const t=await g.text(); appendLog('Ask failed: '+t); return; }
     const resp=await g.json(); const text=resp?.text||'';
     if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{}
     if(resp?.select_flight) try{ applySelectFlight(resp.select_flight);}catch{}
     appendLog(text||'(no response)');
     if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); }
-  }catch(e){ console.error('ask failed', e); appendLog('繧ｨ繝ｩ繝ｼ: '+(e?.message||e)); }
+  }catch(e){ console.error('ask failed', e); appendLog('Error: '+(e?.message||e)); }
   finally{ askBtn.disabled=false; }
 };
 function applyMapCommand(cmd){ try{
@@ -270,12 +270,12 @@ function applySelectFlight(sel){ try{
 const micBtn = document.getElementById('micBtn');
 if(micBtn){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){ micBtn.title='髻ｳ螢ｰ蜈･蜉帙・譛ｪ蟇ｾ蠢懊・繝悶Λ繧ｦ繧ｶ縺ｧ縺・; micBtn.disabled=false; }
+  if(!SR){ micBtn.title='Speech recognition not supported'; micBtn.disabled=false; }
   else{
     const rec = new SR(); rec.lang='ja-JP'; rec.interimResults=false; rec.maxAlternatives=1;
     rec.onresult = (e)=>{ const t=e.results?.[0]?.[0]?.transcript||''; if(t){ const qEl=$('#q'); if(qEl) qEl.value=t; askBtn?.click(); } };
-    rec.onerror = (e)=> appendLog('髻ｳ螢ｰ蜈･蜉帙お繝ｩ繝ｼ: '+(e?.error||'unknown'));
-    micBtn.addEventListener('click', ()=>{ try{ rec.start(); appendLog('繝槭う繧ｯ繧貞・譛溷喧縺励※縺・∪縺吮ｦ'); }catch{} });
+    rec.onerror = (e)=> appendLog('Speech error: '+(e?.error||'unknown'));
+    micBtn.addEventListener('click', ()=>{ try{ rec.start(); appendLog('Initializing microphone...'); }catch{} });
   }
 }
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
@@ -284,9 +284,9 @@ function appendLog(m){ const el=document.getElementById('log'); if(!el) return; 
 let reticle=null; let hitTestSource=null; let viewerSpace=null;
 async function startAR(){
   try{
-    if(!navigator.xr){ alert('WebXR譛ｪ蟇ｾ蠢懊・繝悶Λ繧ｦ繧ｶ縺ｧ縺・); return; }
+    if(!navigator.xr){ alert('WebXR not supported'); return; }
     const ok = await navigator.xr.isSessionSupported?.('immersive-ar');
-    if(ok===false){ alert('immersive-ar譛ｪ蟇ｾ蠢懊・迺ｰ蠅・〒縺・); return; }
+    if(ok===false){ alert('immersive-ar not supported'); return; }
     let session;
     try{ const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsStrict);}catch(_){ const optsLoose={ requiredFeatures:['local-floor'], optionalFeatures:['dom-overlay','hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsLoose); }
     await renderer.xr.setSession(session);
@@ -309,25 +309,23 @@ async function startAR(){
       } };
       ctrl0.addEventListener('select', onSelect); ctrl1.addEventListener('select', onSelect);
       ctrl0.addEventListener('selectstart', onSelect); ctrl1.addEventListener('selectstart', onSelect);
-      // squeeze for quick follow toggle
       const onSqueeze=(e)=>{ followMode=!followMode; if(followChk) followChk.checked=followMode; };
       ctrl0.addEventListener('squeeze', onSqueeze); ctrl1.addEventListener('squeeze', onSqueeze);
     }catch{}
     try{ if(session.requestReferenceSpace && session.requestHitTestSource){ viewerSpace=await session.requestReferenceSpace('viewer'); hitTestSource=await session.requestHitTestSource({ space: viewerSpace }); } }catch{}
     try{ reticle=new THREE.Mesh(new THREE.RingGeometry(0.07,0.09,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x44ff88, transparent:true, opacity:0.85 })); reticle.visible=false; scene.add(reticle);}catch{}
     ensureHUD();
-    console.log('domOverlayState=', session.domOverlayState?.type, 'presenting=', renderer.xr.isPresenting);
     useAR=true; updateCanvasPointer(); animateAR(session);
     session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; updateCanvasPointer(); });
-  }catch(e){ alert('AR髢句ｧ九↓螟ｱ謨励＠縺ｾ縺励◆: '+(e?.message||e)); }
+  }catch(e){ alert('Failed to start AR: '+(e?.message||e)); }
 }
 function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame && hitTestSource){ try{ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { if(reticle) reticle.visible=false; } }catch{} } updateLabelScales(); renderer.render(scene,camera); }); }
 
 // Demo data
 function genDemoStates(center, n=6){ const out=[]; for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; const dkm= 2 + (i%3); const dlat=(dkm/111.132); const dlon=(dkm/(111.320*Math.cos(center.lat*Math.PI/180))); const lat=center.lat+Math.sin(ang)*dlat; const lon=center.lon+Math.cos(ang)*dlon; out.push({ icao24:`demo${i}`, callsign:`DEMO${i+1}`, lat, lon, geo_alt: 200+i*50, vel: 70+i*5, hdg: (ang*180/Math.PI)%360 }); } return out; }
-function runDemo(n=3){ const lat=Number(latI.value), lon=Number(lonI.value); lastStates = genDemoStates({lat,lon}, n); const src=document.getElementById('src'); if(src) src.textContent=`繧ｽ繝ｼ繧ｹ: demo | 萓ｿ謨ｰ: ${lastStates.length}`; placeMarkers({lat,lon}, lastStates); selectedIdx = -1; renderList(lastStates); updateSelectionUI(); }
+function runDemo(n=3){ const lat=Number(latI.value), lon=Number(lonI.value); lastStates = genDemoStates({lat,lon}, n); const src=document.getElementById('src'); if(src) src.textContent=`Source: demo | Flights: ${lastStates.length}`; placeMarkers({lat,lon}, lastStates); selectedIdx = -1; renderList(lastStates); updateSelectionUI(); }
 
-// Pointer enabling for canvas (AR vs non-AR)
+// Pointer enabling for canvas
 function updateCanvasPointer(){ try{ if(!c) return; c.style.pointerEvents = 'auto'; }catch{} }
 updateCanvasPointer();
 
