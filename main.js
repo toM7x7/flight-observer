@@ -12,6 +12,11 @@ const altModeSel = $('#altMode');
 const altScaleInp = $('#altScale');
 const altScaleVal = $('#altScaleVal');
 const groundElevInp = $('#groundElev');
+const autoElevBtn = document.getElementById('autoElev');
+const panSpeedInp = document.getElementById('panSpeed');
+const panSpeedVal = document.getElementById('panSpeedVal');
+const zoomSpeedInp = document.getElementById('zoomSpeed');
+const zoomSpeedVal = document.getElementById('zoomSpeedVal');
 
 $('#fetchBtn')?.addEventListener('click', refresh);
 $('#toggleBtn')?.addEventListener('click', ()=>toggleView());
@@ -69,6 +74,9 @@ let useAR = false;
 let altMode = 'geo';        // 'geo' | 'baro' | 'agl'
 let altScale = 0.006;       // world-units per meter
 let groundElev = 0;         // meters AMSL
+let panSpeed = 1.0;         // user pan speed multiplier
+let zoomSpeed = 1.0;        // user zoom sensitivity multiplier
+const ALT_SCALE_BASE = 0.006; // display baseline
 
 // DOM Overlay handling (for AR chat overlay focus)
 const overlayRoot = document.getElementById('overlay');
@@ -96,7 +104,14 @@ function altitudeMeters(s){
   // AGL: subtract ground elevation (manual)
   const base = geo ?? baro ?? 0; return Math.max(0, base - groundElev);
 }
-function altitudeColor(alt){ const t = THREE.MathUtils.clamp(alt/8000,0,1); const h = (200/360)*(1-t); const s=0.8, l=0.55; const col=new THREE.Color(); col.setHSL(h,s,l); return col.getHex(); }
+const ALT_MODE_HUE = { geo: 120/360, baro: 210/360, agl: 30/360 };
+function altitudeColor(alt){
+  const t = THREE.MathUtils.clamp(alt/8000,0,1); // normalize up to 8km
+  const base = ALT_MODE_HUE[altMode] ?? (200/360);
+  const range = 60/360; // shift up to 60deg
+  const h = base - t*range;
+  const s=0.8, l=0.55; const col=new THREE.Color(); col.setHSL(h,s,l); return col.getHex();
+}
 function makeBarMesh(height, color){ const h=Math.max(0.2, height); const r=0.6; const geo=new THREE.CylinderGeometry(r,r,h,12,1,true); geo.translate(0,h/2,0); const mat=new THREE.MeshStandardMaterial({color, transparent:true, opacity:0.95}); const mesh=new THREE.Mesh(geo,mat); return mesh; }
 function makeMarkerMesh({callsign,alt_m}){ const color=altitudeColor(alt_m); const height = alt_m * altScale; const bar=makeBarMesh(height, color); const group=new THREE.Group(); group.add(bar); const label=makeLabel(callsign||'N/A'); label.position.set(0,height+1.2,0); group.add(label); return group; }
 function placeMarkers(center, flights){ markers.clear(); flights.forEach((s,i)=>{ const {x,y}=llDiffMeters(center.lat,center.lon,s.lat,s.lon); const alt_m=altitudeMeters(s); const m=makeMarkerMesh({callsign:s.callsign, alt_m}); m.userData.idx=i; m.userData.alt_m=alt_m; m.position.set(x/10,0,y/10); markers.add(m); }); updateLabelScales(); }
@@ -179,17 +194,30 @@ function applySelectionEffects(){
 
 // Altitude controls listeners
 altModeSel?.addEventListener('change', ()=>{ altMode = altModeSel.value||'geo'; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
-altScaleInp?.addEventListener('input', ()=>{ altScale = Number(altScaleInp.value)||0.006; if(altScaleVal) altScaleVal.textContent = `x${altScale.toFixed(3)}`; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
+altScaleInp?.addEventListener('input', ()=>{ altScale = Number(altScaleInp.value)||ALT_SCALE_BASE; if(altScaleVal){ const r=altScale/ALT_SCALE_BASE; altScaleVal.textContent = `x${r.toFixed(2)}`; } placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
 groundElevInp?.addEventListener('change', ()=>{ groundElev = Number(groundElevInp.value)||0; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
+autoElevBtn?.addEventListener('click', async ()=>{
+  try{
+    const lat=Number(latI.value), lon=Number(lonI.value);
+    const r=await fetch(`/api/elevation?lat=${lat}&lon=${lon}`);
+    const j=await r.json();
+    if(Number.isFinite(j?.elevation)){ groundElev = j.elevation; if(groundElevInp) groundElevInp.value=String(Math.round(groundElev)); placeMarkers({lat,lon}, lastStates); applySelectionEffects(); appendLog(`地面高度を ${Math.round(groundElev)} m に設定しました`); }
+    else { appendLog('地面高度の取得に失敗しました'); }
+  }catch(e){ appendLog('地面高度の取得でエラー'); }
+});
+
+// Sensitivity controls
+panSpeedInp?.addEventListener('input', ()=>{ panSpeed = Number(panSpeedInp.value)||1; if(panSpeedVal) panSpeedVal.textContent = `x${panSpeed.toFixed(1)}`; });
+zoomSpeedInp?.addEventListener('input', ()=>{ zoomSpeed = Number(zoomSpeedInp.value)||1; if(zoomSpeedVal) zoomSpeedVal.textContent = `x${zoomSpeed.toFixed(1)}`; });
 
 // Map-like panning and zoom
 let isPanning=false; let panStart={x:0,y:0}; let panBase={lat:0,lon:0};
 function onPointerDown(ev){ try{ c.setPointerCapture(ev.pointerId); }catch{} isPanning=true; panStart={x:ev.clientX,y:ev.clientY}; panBase={lat:Number(latI.value)||0, lon:Number(lonI.value)||0}; c.style.cursor='grabbing'; }
-function onPointerMove(ev){ if(!isPanning) return; const dx=ev.clientX-panStart.x; const dy=ev.clientY-panStart.y; const radius=Number(radI.value||30); const width=innerWidth, height=innerHeight; const kmPerPxX=(2*radius)/Math.max(1,width); const kmPerPxY=(2*radius)/Math.max(1,height); const dKmX=dx*kmPerPxX; const dKmY=-dy*kmPerPxY; const Rlat=111.132; const Rlon=111.320*Math.cos(panBase.lat*Math.PI/180); const dlat=dKmY/Rlat; const dlon=dKmX/Math.max(1e-6,Rlon); latI.value=String(panBase.lat + dlat); lonI.value=String(panBase.lon + dlon); // reposition markers for current center
+function onPointerMove(ev){ if(!isPanning) return; const dx=ev.clientX-panStart.x; const dy=ev.clientY-panStart.y; const radius=Number(radI.value||30); const width=innerWidth, height=innerHeight; const kmPerPxX=(2*radius)/Math.max(1,width); const kmPerPxY=(2*radius)/Math.max(1,height); const dKmX=dx*kmPerPxX*panSpeed; const dKmY=-dy*kmPerPxY*panSpeed; const Rlat=111.132; const Rlon=111.320*Math.cos(panBase.lat*Math.PI/180); const dlat=dKmY/Rlat; const dlon=dKmX/Math.max(1e-6,Rlon); latI.value=String(panBase.lat + dlat); lonI.value=String(panBase.lon + dlon); // reposition markers for current center
   placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates);
 }
 function onPointerUp(ev){ if(!isPanning) return; isPanning=false; c.style.cursor='grab'; try{ c.releasePointerCapture(ev.pointerId);}catch{} scheduleRefresh(150); }
-function onWheel(ev){ ev.preventDefault(); let r=Number(radI.value||30); const f = ev.deltaY>0? 1.12 : 0.89; r=Math.round(THREE.MathUtils.clamp(r*f,5,200)); radI.value=String(r); scheduleRefresh(200); }
+function onWheel(ev){ ev.preventDefault(); let r=Number(radI.value||30); const step = ev.deltaY>0? (1.08*zoomSpeed) : (0.92/zoomSpeed); r=Math.round(THREE.MathUtils.clamp(r*step,5,200)); radI.value=String(r); scheduleRefresh(200); }
 addEventListener('keydown',(e)=>{ const r=Number(radI.value||30); const stepKm=r*0.2; const lat0=Number(latI.value), lon0=Number(lonI.value); const Rlat=111.132; const Rlon=111.320*Math.cos(lat0*Math.PI/180); let dlat=0, dlon=0; if(e.key==='ArrowUp') dlat= stepKm/Rlat; else if(e.key==='ArrowDown') dlat= -stepKm/Rlat; else if(e.key==='ArrowLeft') dlon= -stepKm/Math.max(1e-6,Rlon); else if(e.key==='ArrowRight') dlon= stepKm/Math.max(1e-6,Rlon); else return; latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); scheduleRefresh(120); });
 
 // attach pointer handlers to canvas
