@@ -1,6 +1,14 @@
 ﻿import * as THREE from 'three';
 
 
+// ---- Minimal hardening: global error surface + bootstrap retries ----
+function surfaceError(msg){ try{ console.error(msg); appendLog(typeof msg==='string'? msg : (msg?.message||String(msg))); const s=document.getElementById('src'); if(s) s.textContent = 'ERROR: see log'; }catch{} }
+window.addEventListener('error', (e)=>{ surfaceError(e?.error||e?.message||'window.error'); });
+window.addEventListener('unhandledrejection', (e)=>{ surfaceError(e?.reason||'unhandledrejection'); });
+(function bootstrapRetries(){ let n=0; const t=setInterval(()=>{ try{ renderPresetSelect(); prepareARButton(); }catch{} if(++n>=3) clearInterval(t); }, 1200); })();
+import * as THREE from 'three';
+
+
   const q=(qEl?.value||'').trim(); if(!q){ appendLog('Please enter a question'); return; }
   if(applyQuickVoiceCommand(q)) { try{ setMicState('idle'); }catch{} return; }
   askBtn.disabled=true; try{ setMicState('replying'); }catch{}
