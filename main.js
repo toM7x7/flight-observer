@@ -389,7 +389,19 @@ async function startAR(){
         else if(a==='west'){ adjustCenterByKm(0,-0.5); }
         else if(a==='east'){ adjustCenterByKm(0,0.5); }
       } };
-      const onSelectStart=(e)=>{ if(!hud) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects([hudBg], true); if(hits.length>0){ hudDragging=true; hudDragCtrl=src; hudPinned=true; } else { onSelect(e); } };
+      const onSelectStart=(e)=>{
+        if(!hud) return;
+        const src=e.target; const m=src.matrixWorld;
+        const origin=new THREE.Vector3().setFromMatrixPosition(m);
+        const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize();
+        raycaster.set(origin, dir);
+        // 1) Button hits take precedence => trigger button, no drag
+        const btnHits=raycaster.intersectObjects(interactiveTargets, true);
+        if(btnHits.length>0){ onSelect(e); return; }
+        // 2) Drag only when background explicitly hit
+        const bgHits=raycaster.intersectObjects([hudBg], true);
+        if(bgHits.length>0){ hudDragging=true; hudDragCtrl=src; hudPinned=true; }
+      };
       const onSelectEnd=(e)=>{ hudDragging=false; hudDragCtrl=null; };
       ctrl0.addEventListener('select', onSelect); ctrl1.addEventListener('select', onSelect);
       ctrl0.addEventListener('selectstart', onSelectStart); ctrl1.addEventListener('selectstart', onSelectStart);
