@@ -32,6 +32,19 @@
       <select id="preset"></select>
       <button id="savePreset">＋現在地を保存</button>
     </div>
+    <div class="row">
+      高度:
+      <select id="altMode">
+        <option value="geo">GNSS(geo)</option>
+        <option value="baro">気圧(baro)</option>
+        <option value="agl">AGL(地表差)</option>
+      </select>
+      誇張:
+      <input id="altScale" type="range" min="0.001" max="0.02" step="0.001" value="0.006" />
+      <span id="altScaleVal">x0.006</span>
+      地面高度(m):
+      <input id="groundElev" value="0" />
+    </div>
   </div>
   <div id="list"></div>
   <div id="info"></div>

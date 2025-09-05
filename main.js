@@ -8,6 +8,10 @@ const c = $('#c');
 const latI = $('#lat');
 const lonI = $('#lon');
 const radI = $('#radius');
+const altModeSel = $('#altMode');
+const altScaleInp = $('#altScale');
+const altScaleVal = $('#altScaleVal');
+const groundElevInp = $('#groundElev');
 
 $('#fetchBtn')?.addEventListener('click', refresh);
 $('#toggleBtn')?.addEventListener('click', ()=>toggleView());
@@ -62,6 +66,9 @@ function toggleView(){ grid.visible = !grid.visible; }
 let lastStates = [];
 let selectedIdx = -1;
 let useAR = false;
+let altMode = 'geo';        // 'geo' | 'baro' | 'agl'
+let altScale = 0.006;       // world-units per meter
+let groundElev = 0;         // meters AMSL
 
 // DOM Overlay handling (for AR chat overlay focus)
 const overlayRoot = document.getElementById('overlay');
@@ -81,8 +88,18 @@ function updateLabelScales(){ const camPos=new THREE.Vector3(); camera.getWorldP
 
 // Placement helpers
 function llDiffMeters(lat0,lon0,lat,lon){ const Rlat=111132, Rlon=111320*Math.cos(lat0*Math.PI/180); return { x:(lon-lon0)*Rlon, y:(lat-lat0)*Rlat }; }
-function makeMarkerMesh({callsign,hdg}){ const g=new THREE.ConeGeometry(3,8,12), m=new THREE.MeshStandardMaterial({color:0xffc83d}); const mesh=new THREE.Mesh(g,m); mesh.rotation.x=-Math.PI/2; const label=makeLabel(callsign||'N/A'); label.position.set(0,5,0); mesh.add(label); const yaw=THREE.MathUtils.degToRad(hdg||0); mesh.rotation.z=-yaw; return mesh; }
-function placeMarkers(center, flights){ markers.clear(); flights.forEach((f,i)=>{ const {x,y}=llDiffMeters(center.lat,center.lon,f.lat,f.lon); const m=makeMarkerMesh(f); m.userData.idx=i; m.position.set(x/10,0,y/10); markers.add(m); }); updateLabelScales(); }
+function altitudeMeters(s){
+  const geo = Number.isFinite(s.geo_alt)? s.geo_alt : null;
+  const baro = Number.isFinite(s.baro_alt)? s.baro_alt : null;
+  if (altMode==='geo') return geo ?? baro ?? 0;
+  if (altMode==='baro') return baro ?? geo ?? 0;
+  // AGL: subtract ground elevation (manual)
+  const base = geo ?? baro ?? 0; return Math.max(0, base - groundElev);
+}
+function altitudeColor(alt){ const t = THREE.MathUtils.clamp(alt/8000,0,1); const h = (200/360)*(1-t); const s=0.8, l=0.55; const col=new THREE.Color(); col.setHSL(h,s,l); return col.getHex(); }
+function makeBarMesh(height, color){ const h=Math.max(0.2, height); const r=0.6; const geo=new THREE.CylinderGeometry(r,r,h,12,1,true); geo.translate(0,h/2,0); const mat=new THREE.MeshStandardMaterial({color, transparent:true, opacity:0.95}); const mesh=new THREE.Mesh(geo,mat); return mesh; }
+function makeMarkerMesh({callsign,alt_m}){ const color=altitudeColor(alt_m); const height = alt_m * altScale; const bar=makeBarMesh(height, color); const group=new THREE.Group(); group.add(bar); const label=makeLabel(callsign||'N/A'); label.position.set(0,height+1.2,0); group.add(label); return group; }
+function placeMarkers(center, flights){ markers.clear(); flights.forEach((s,i)=>{ const {x,y}=llDiffMeters(center.lat,center.lon,s.lat,s.lon); const alt_m=altitudeMeters(s); const m=makeMarkerMesh({callsign:s.callsign, alt_m}); m.userData.idx=i; m.userData.alt_m=alt_m; m.position.set(x/10,0,y/10); markers.add(m); }); updateLabelScales(); }
 
 // Presets (basic)
 const PRESETS_DEFAULT = [
@@ -136,7 +153,9 @@ function renderList(states){
     applySelectionEffects();
     const s=states[idx]; if(!s) return;
     const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon};
-    try{ const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}); const {text}=await g.json(); appendLog(text||'(no response)'); }catch(e){ console.error('describe failed',e); }
+    try{ const g=await fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}); const {text}=await g.json(); appendLog(text||'(no response)');
+      const speakEl=$('#speak'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); }
+    }catch(e){ console.error('describe failed',e); }
   }));
 }
 
@@ -148,7 +167,7 @@ function applySelectionEffects(){
   // info panel
   const info=document.getElementById('info'); if(!info) return; if(selectedIdx<0){ info.innerHTML=''; return; }
   const s=lastStates[selectedIdx]; if(!s){ info.innerHTML=''; return; }
-  const alt=Math.round(s.geo_alt??s.baro_alt??0); const spdKt=Math.round((s.vel??0)*1.94384); const hdg=Math.round(s.hdg??0);
+  const alt=Math.round(altitudeMeters(s)); const spdKt=Math.round((s.vel??0)*1.94384); const hdg=Math.round(s.hdg??0);
   const title = s.callsign || '(unknown)';
   info.innerHTML = `<div class='card'>
     <div class='title'>${title}</div>
@@ -157,6 +176,11 @@ function applySelectionEffects(){
     <div class='row'>方位: ${hdg}°</div>
   </div>`;
 }
+
+// Altitude controls listeners
+altModeSel?.addEventListener('change', ()=>{ altMode = altModeSel.value||'geo'; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
+altScaleInp?.addEventListener('input', ()=>{ altScale = Number(altScaleInp.value)||0.006; if(altScaleVal) altScaleVal.textContent = `x${altScale.toFixed(3)}`; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
+groundElevInp?.addEventListener('change', ()=>{ groundElev = Number(groundElevInp.value)||0; placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); applySelectionEffects(); });
 
 // Map-like panning and zoom
 let isPanning=false; let panStart={x:0,y:0}; let panBase={lat:0,lon:0};
