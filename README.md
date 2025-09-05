@@ -4,6 +4,7 @@
 
 - AR の詳しい診断・運用ガイド: `docs/AR.md`
 - 最小要件 / Fail-Safes: `docs/AR_MINIMUMS.md`
+- メンテナンス&復旧ガイド: `docs/MAINTENANCE.md`
 
 ## デプロイ（GitHub → Vercel）
 1. リポジトリを GitHub に push
