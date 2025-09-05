@@ -1,5 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
+import { PERSONA_SYSTEM } from './persona';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 const GOOGLE_KEY = process.env.GOOGLE_API_KEY || '';
@@ -25,10 +26,10 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
     if (!message || String(message).trim()==='') return res.status(400).json({error:'message required'});
 
     const sys = [
-      'あなたは航空ファン向けの「現地ガイドAI」です。',
-      '日本語で簡潔・正確に答え、必要なら最新情報を検索し、出典URLを付けます。',
-      '機体が未選択のときは region{lat,lon,radius_km} から今の空の見どころを要約して良い。',
-      '検索が必要な場合は、次のJSONのみを1行で返してください: {"search_web":{"q":"<検索語>"}}',
+      PERSONA_SYSTEM,
+      'あなたは現地ガイドAIとして、簡潔で正確な日本語で回答します。',
+      '機体未選択のときは region{lat,lon,radius_km} から「今の空の見どころ」を要約して良い。',
+      '最新性が必要な場合は、次のJSONのみを単独で返してください: {"search_web":{"q":"<検索語>"}}'
     ].join('\n');
 
     const ctx = [
@@ -41,22 +42,19 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
     const first = await ai.models.generateContent({ model:'gemini-2.5-flash', contents:[{ role:'user', parts:[{text:ctx}] }] });
     const firstText = (first as any).text || '';
 
-    // Try to detect search request protocol
     let searchQ: string | null = null;
-    try {
-      const maybe = JSON.parse(firstText.trim());
-      if (maybe && maybe.search_web && typeof maybe.search_web.q === 'string') searchQ = maybe.search_web.q;
-    } catch {}
+    try { const maybe = JSON.parse(firstText.trim()); if (maybe && maybe.search_web && typeof maybe.search_web.q === 'string') searchQ = maybe.search_web.q; } catch {}
 
     if (searchQ) {
       const results = await searchWeb(searchQ);
       const secondPrompt = [
-        '以下の検索結果を踏まえて最新の回答を作ってください。',
+        PERSONA_SYSTEM,
+        '以下の検索結果を踏まえて最新の回答を作成してください。',
         `質問: ${message}`,
         `地域: ${JSON.stringify(region||{})}`,
         flight ? `機体: ${JSON.stringify(flight)}` : '',
         `検索結果(JSON): ${JSON.stringify(results)}`,
-        '回答には根拠となるURLを2〜3件、文末に列挙してください。'
+        '回答の最後に根拠URLを1〜3件、文末に列挙してください。'
       ].filter(Boolean).join('\n');
 
       const second = await ai.models.generateContent({ model:'gemini-2.5-flash', contents:[{role:'user', parts:[{text:secondPrompt}]}] });
@@ -64,8 +62,6 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
       return res.json({ text, sources: results });
     }
 
-    // No search needed, return first answer
     return res.json({ text: firstText, sources: [] });
   }catch(e:any){ return res.status(500).json({error:e?.message||'ask_failed'}); }
 }
-
