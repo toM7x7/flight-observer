@@ -180,37 +180,37 @@ function makeArrow(){
 }
 function ensureHUD(){ if(hud) return; hud=new THREE.Group();
   // background board (single panel)
-  const bgGeo=new THREE.PlaneGeometry(0.78, 0.34, 1, 1);
+  const bgGeo=new THREE.PlaneGeometry(0.90, 0.38, 1, 1);
   const bgMat=new THREE.MeshBasicMaterial({color:0x1a2735, transparent:true, opacity:0.9});
   hudBg=new THREE.Mesh(bgGeo, bgMat); hudBg.position.set(0,0,-0.001); hudBg.userData.action='drag'; hud.add(hudBg);
 
   // primary row (spaced)
-  hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.20,-0.06,0); hudFocus.userData.action='focus';
-  hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.00,-0.06,0); hudFollow.userData.action='follow';
-  hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.20,-0.06,0); hudAsk.userData.action='ask';
+  // primary row (y=+0.02)
+  hudPin=makeHudButton('Pin', 0.10, 0.05); hudPin.position.set(-0.38, 0.02, 0); hudPin.userData.action='pin-toggle';
+  hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.22, 0.02, 0); hudFocus.userData.action='focus';
+  hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.00, 0.02, 0); hudFollow.userData.action='follow';
+  hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.22, 0.02, 0); hudAsk.userData.action='ask';
+  hudMic=makeHudButton('Mic', 0.10, 0.05); hudMic.position.set(0.38, 0.02, 0); hudMic.userData.action='mic';
 
-  // secondary controls
-  hudRPlus=makeHudButton('+R', 0.08, 0.05); hudRPlus.position.set(0.30,-0.06,0); hudRPlus.userData.action='radius+';
-  hudRMinus=makeHudButton('-R', 0.08, 0.05); hudRMinus.position.set(0.38,-0.06,0); hudRMinus.userData.action='radius-';
-  hudPin=makeHudButton('Pin', 0.10, 0.05); hudPin.position.set(-0.32,-0.06,0); hudPin.userData.action='pin-toggle';
-  hudPlace=makeHudButton('Place', 0.12, 0.05); hudPlace.position.set(-0.32,0.08,0); hudPlace.userData.action='place-here';
-  hudMic=makeHudButton('Mic', 0.10, 0.05); hudMic.position.set(0.32,0.08,0); hudMic.userData.action='mic';
+  // secondary row (y=-0.10)
+  hudPlace=makeHudButton('Place', 0.12, 0.05); hudPlace.position.set(-0.38, -0.10, 0); hudPlace.userData.action='place-here';
+  hudWest =makeHudButton('W', 0.06, 0.06); hudWest .position.set(-0.22, -0.10, 0); hudWest .userData.action='west';
+  hudNorth=makeHudButton('N', 0.06, 0.06); hudNorth.position.set(-0.10, -0.10, 0); hudNorth.userData.action='north';
+  hudEast =makeHudButton('E', 0.06, 0.06); hudEast .position.set( 0.02, -0.10, 0); hudEast .userData.action='east';
+  hudSouth=makeHudButton('S', 0.06, 0.06); hudSouth.position.set( 0.14, -0.10, 0); hudSouth.userData.action='south';
+  hudRPlus=makeHudButton('+R', 0.08, 0.05); hudRPlus.position.set(0.26, -0.10, 0); hudRPlus.userData.action='radius+';
+  hudRMinus=makeHudButton('-R', 0.08, 0.05); hudRMinus.position.set(0.34, -0.10, 0); hudRMinus.userData.action='radius-';
 
   // readouts
   const makeHudText = (w=0.22,h=0.05,text='')=>{ const cvs=document.createElement('canvas'); cvs.width=512; cvs.height=128; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,512,128); ctx.fillStyle='#9ec7ff'; ctx.font='bold 46px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text,256,64); const tex=new THREE.CanvasTexture(cvs); const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true}); const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h), mat); m.userData={cvs,ctx,tex}; return m; };
-  hudReadoutRadius=makeHudText(0.22,0.05,'R: -- km'); hudReadoutRadius.position.set(0.04,0.08,0);
-  hudReadoutScale =makeHudText(0.22,0.05,'Scale: x1.00'); hudReadoutScale.position.set(-0.12,0.08,0);
-
-  // navigation
-  hudNorth=makeHudButton('N', 0.06, 0.06); hudNorth.position.set(-0.06,0.08,0); hudNorth.userData.action='north';
-  hudSouth=makeHudButton('S', 0.06, 0.06); hudSouth.position.set(-0.06,-0.20,0); hudSouth.userData.action='south';
-  hudWest =makeHudButton('W', 0.06, 0.06); hudWest .position.set(-0.13,-0.06,0); hudWest .userData.action='west';
-  hudEast =makeHudButton('E', 0.06, 0.06); hudEast .position.set( 0.01,-0.06,0); hudEast .userData.action='east';
+  hudReadoutScale =makeHudText(0.26,0.05,'Scale: x1.00'); hudReadoutScale.position.set(-0.18,0.12,0);
+  hudReadoutRadius=makeHudText(0.26,0.05,'R: -- km');    hudReadoutRadius.position.set( 0.18,0.12,0);
 
   dirArrow=makeArrow(); dirArrow.position.set(0,0.10,0);
   [hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,hudReadoutRadius,hudReadoutScale,hudNorth,hudSouth,hudWest,hudEast,dirArrow].forEach(x=>hud.add(x));
   scene.add(hud);
-  interactiveTargets.push(hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,hudNorth,hudSouth,hudWest,hudEast);
+  // exclude hudBg from click targets to avoid drag interference on button press
+  interactiveTargets.push(hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,hudNorth,hudSouth,hudWest,hudEast);
 
   hud.onBeforeRender=()=>{
     const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
@@ -376,7 +376,7 @@ async function startAR(){
       const ctrl1=renderer.xr.getController(1); ctrl1.add(mkRay()); scene.add(ctrl1);
       ctrl0.addEventListener('connected', (e)=>{ try{ ctrl0.userData.gamepad = e.data?.gamepad; }catch{} });
       ctrl1.addEventListener('connected', (e)=>{ try{ ctrl1.userData.gamepad = e.data?.gamepad; }catch{} });
-      const onSelect=(e)=>{ if(!hud) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects(interactiveTargets,true); if(hits.length>0){ const a=hits[0].object?.userData?.action; if(a==='focus'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0);} }
+      const onSelect=(e)=>{ if(!hud || hudDragging) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects(interactiveTargets,true); if(hits.length>0){ const a=hits[0].object?.userData?.action; if(a==='focus'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0);} }
         else if(a==='follow'){ followMode=!followMode; if(followChk){ followChk.checked=followMode; } if(followMode && selectedIdx>=0){ const s=lastStates[selectedIdx]; selectedKey=s?.icao24||s?.callsign||null; } }
         else if(a==='ask'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}).then(r=>r.json()).then(({text})=>{ appendLog(text||'(no response)'); if(useAR && text) try{ showARText(text); }catch{} }); } }
         else if(a==='radius+'){ const r=Number(radI.value||30); radI.value=String(Math.round(Math.min(200, r+2))); scheduleRefresh(0); }
