@@ -341,7 +341,23 @@ if (c){ c.addEventListener('pointerdown', onPointerDown); c.addEventListener('po
 
 // Ask (region-first)
 const askBtn=$('#ask');
-if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const resp=await g.json(); const text=resp?.text||''; if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{} if(resp?.select_flight) try{ applySelectFlight(resp.select_flight);}catch{} appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
+if(askBtn) askBtn.onclick=async ()=>{
+  const qEl=$('#q'); const speakEl=$('#speak');
+  const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; }
+  askBtn.disabled=true;
+  const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) };
+  const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined;
+  try{
+    const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })});
+    if(!g.ok){ const t=await g.text(); appendLog('Ask失敗: '+t); return; }
+    const resp=await g.json(); const text=resp?.text||'';
+    if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{}
+    if(resp?.select_flight) try{ applySelectFlight(resp.select_flight);}catch{}
+    appendLog(text||'(no response)');
+    if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); }
+  }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); }
+  finally{ askBtn.disabled=false; }
+};
 function applyMapCommand(cmd){ try{
   if(cmd.set_center){ const {lat,lon}=cmd.set_center; if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return; } }
   if(cmd.adjust_center){ const {north_km=0,east_km=0}=cmd.adjust_center; const lat0=Number(latI.value), lon0=Number(lonI.value); const dlat = north_km/111.132; const dlon = east_km/(111.320*Math.cos(lat0*Math.PI/180)); latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); scheduleRefresh(0); return; }
