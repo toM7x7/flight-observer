@@ -162,8 +162,9 @@ const raycaster = new THREE.Raycaster();
 let hud=null, hudFocus=null, hudFollow=null, hudAsk=null, dirArrow=null;
 let hudRPlus=null, hudRMinus=null, hudNorth=null, hudSouth=null, hudEast=null, hudWest=null;
 let hudBg=null, hudPin=null, hudPlace=null, hudMic=null; // new controls
-let hudReadoutRadius=null, hudReadoutScale=null, hudReadoutPan=null; // readouts
-let hudPinned=false, hudInitPlaced=false, hudDragging=false, hudDragCtrl=null;
+let hudReadoutRadius=null, hudReadoutScale=null, hudReadoutPan=null, hudReadoutAlt=null, hudReadoutFollow=null, hudReadoutPreset=null, hudReadoutSel=null; // readouts
+let hudPresetPrev=null, hudPresetNext=null, hudPresetGo=null; let hudPresetIndex=0;
+let hudPinned=false, hudInitPlaced=false, hudDragging=false, hudDragCtrl=null, hudDragFromPlace=false, hudDragStartTime=0;
 const interactiveTargets=[];
 function makeHudButton(text, w=0.14, h=0.06){
   const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
@@ -207,10 +208,14 @@ function ensureHUD(){ if(hud) return; hud=new THREE.Group();
   hudReadoutRadius=makeHudText(0.26,0.05,'R: -- km');    hudReadoutRadius.position.set( 0.18,0.12,0);
 
   dirArrow=makeArrow(); dirArrow.position.set(0,0.10,0);
-  [hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,hudReadoutRadius,hudReadoutScale,hudNorth,hudSouth,hudWest,hudEast,dirArrow].forEach(x=>hud.add(x));
+  [hudBg,hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,
+   hudReadoutAlt,hudReadoutScale,hudReadoutRadius,hudReadoutFollow,hudReadoutSel,
+   hudPresetPrev,hudPresetNext,hudPresetGo,hudReadoutPreset,
+   hudNorth,hudSouth,hudWest,hudEast,dirArrow].forEach(x=>hud.add(x));
   scene.add(hud);
   // exclude hudBg from click targets to avoid drag interference on button press
-  interactiveTargets.push(hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,hudNorth,hudSouth,hudWest,hudEast);
+  interactiveTargets.push(hudFocus,hudFollow,hudAsk,hudRPlus,hudRMinus,hudPin,hudPlace,hudMic,
+    hudPresetPrev,hudPresetNext,hudPresetGo,hudNorth,hudSouth,hudWest,hudEast);
 
   hud.onBeforeRender=()=>{
     const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
@@ -344,6 +349,31 @@ if(micBtn){
 }
 function appendLog(m){ const el=document.getElementById('log'); if(!el) return; el.innerHTML += `<div>${m}</div>`; el.scrollTop=el.scrollHeight; }
 
+
+// Quick voice commands: presets / lat,lon / radius / alt mode / follow
+function applyQuickVoiceCommand(text){ try{
+  const s=String(text||''); const lower=s.toLowerCase();
+  // lat,lon pattern
+  const m=s.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if(m){ const lat=Number(m[1]), lon=Number(m[2]); if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return true; } }
+  // radius
+  const mr = s.match(/(?:radius|半径)\s*(\d{1,3})/i);
+  if(mr){ const r=Math.max(5, Math.min(200, Number(mr[1]))); radI.value=String(r); scheduleRefresh(0); return true; }
+  // alt mode
+  if(/\bagl\b|地表|地面/i.test(s)){ altMode='agl'; altModeSel && (altModeSel.value='agl'); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); updateSelectionUI(); return true; }
+  if(/\bbaro\b|気圧/i.test(s)){ altMode='baro'; altModeSel && (altModeSel.value='baro'); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); updateSelectionUI(); return true; }
+  if(/\bgeo\b|gnss|衛星/i.test(s)){ altMode='geo'; altModeSel && (altModeSel.value='geo'); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); updateSelectionUI(); return true; }
+  // follow
+  if(/follow on|追従\s*on|追尾\s*on/i.test(s)){ followMode=true; if(followChk) followChk.checked=true; return true; }
+  if(/follow off|追従\s*off|追尾\s*off/i.test(s)){ followMode=false; if(followChk) followChk.checked=false; return true; }
+  // presets by name
+  const ps = (typeof getPresets==='function'? getPresets():[]);
+  const norm=(x)=>String(x||'').toLowerCase();
+  for(let i=0;i<ps.length;i++){ const name=norm(ps[i].name); if(lower.includes(name)){ hudPresetIndex=i; const p=ps[i]; latI.value=String(p.lat); lonI.value=String(p.lon); radI.value=String(p.radius); scheduleRefresh(0); return true; } }
+  const alias = [ ['haneda','haneda'], ['narita','narita'], ['itami','itm'], ['naha','naha'], ['centrair','centrair'] ];
+  for(const [k,label] of alias){ if(lower.includes(k)){ const i=ps.findIndex(p=>norm(p.name).includes(label)); if(i>=0){ hudPresetIndex=i; const p=ps[i]; latI.value=String(p.lat); lonI.value=String(p.lon); radI.value=String(p.radius); scheduleRefresh(0); return true; } } }
+  return false;
+}catch{ return false; }}
 // Simple CLI-style typewriter panel in AR (optional)
 let cliPanel=null, cliTex=null, cliCtx=null, cliCvs=null, cliText='', cliIndex=0, cliLastUpdate=0;
 function showARText(text){ try{
@@ -451,6 +481,14 @@ async function checkSTT(){
   }catch{ try{ setMicState('unavailable'); }catch{} }
 }
 checkSTT();
+
+
+
+
+
+
+
+
 
 
 
