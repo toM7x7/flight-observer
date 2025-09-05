@@ -214,6 +214,8 @@ function onPointerDown(ev){ isPanning=true; panStart={x:ev.clientX,y:ev.clientY}
 function onPointerMove(ev){ if(!isPanning) return; const dx=ev.clientX-panStart.x; const dy=ev.clientY-panStart.y; const radius=Number(radI.value||30); const width=innerWidth, height=innerHeight; const kmPerPxX=(2*radius)/Math.max(1,width); const kmPerPxY=(2*radius)/Math.max(1,height); const dKmX=dx*kmPerPxX*panSpeed; const dKmY=-dy*kmPerPxY*panSpeed; const Rlat=111.132; const Rlon=111.320*Math.cos(panBase.lat*Math.PI/180); const dlat=dKmY/Rlat; const dlon=dKmX/Math.max(1e-6,Rlon); latI.value=String(panBase.lat + dlat); lonI.value=String(panBase.lon + dlon); placeMarkers({lat:Number(latI.value), lon:Number(lonI.value)}, lastStates); }
 function onPointerUp(ev){ if(!isPanning) return; isPanning=false; c.style.cursor='grab'; try{ c.releasePointerCapture(ev.pointerId);}catch{} scheduleRefresh(150); }
 function onWheel(ev){ ev.preventDefault(); let r=Number(radI.value||30); const step = ev.deltaY>0? (1.08*zoomSpeed) : (0.92/zoomSpeed); r=Math.round(THREE.MathUtils.clamp(r*step,5,200)); radI.value=String(r); scheduleRefresh(200); }
+function adjustZoom(delta){ let r=Number(radI.value||30); const factor=THREE.MathUtils.clamp(1+delta,0.5,2.0); r=Math.round(THREE.MathUtils.clamp(r*factor,5,200)); radI.value=String(r); scheduleRefresh(120); }
+function adjustPanSpeed(delta){ panSpeed = THREE.MathUtils.clamp((panSpeed||1)+delta, 0.5, 3.0); if(panSpeedVal) panSpeedVal.textContent = `x${panSpeed.toFixed(1)}`; }
 addEventListener('keydown',(e)=>{ const r=Number(radI.value||30); const stepKm=r*0.2; const lat0=Number(latI.value), lon0=Number(lonI.value); const Rlat=111.132; const Rlon=111.320*Math.cos(lat0*Math.PI/180); let dlat=0, dlon=0; if(e.key==='ArrowUp') dlat= stepKm/Rlat; else if(e.key==='ArrowDown') dlat= -stepKm/Rlat; else if(e.key==='ArrowLeft') dlon= -stepKm/Math.max(1e-6,Rlon); else if(e.key==='ArrowRight') dlon= stepKm/Math.max(1e-6,Rlon); else return; latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); placeMarkers({lat:Number(latI.value),lon:Number(lonI.value)}, lastStates); scheduleRefresh(120); });
 if (c){ c.addEventListener('pointerdown', onPointerDown); c.addEventListener('pointermove', onPointerMove); c.addEventListener('pointerup', onPointerUp); c.addEventListener('pointercancel', onPointerUp); c.addEventListener('wheel', onWheel, { passive:false }); }
 
@@ -247,6 +249,31 @@ if(askBtn) askBtn.onclick=async ()=>{
   }catch(e){ console.error('ask failed', e); appendLog('Error: '+(e?.message||e)); }
   finally{ askBtn.disabled=false; }
 };
+// Press-To-Talk (PTT) microphone to /api/stt (optional)
+let pttStream=null, pttRecorder=null, pttChunks=[];
+async function pttStart(){
+  try{
+    if(pttRecorder) return; if(!navigator.mediaDevices?.getUserMedia) return appendLog('PTT not available');
+    pttStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    pttChunks=[];
+    const mime = MediaRecorder.isTypeSupported?.('audio/webm')? 'audio/webm' : '';
+    pttRecorder = new MediaRecorder(pttStream, mime? {mimeType:mime}: {});
+    pttRecorder.ondataavailable = (e)=>{ if(e.data?.size>0) pttChunks.push(e.data); };
+    pttRecorder.onstop = async ()=>{
+      try{
+        const blob = new Blob(pttChunks, {type:'audio/webm'});
+        pttChunks=[];
+        // Try optional STT endpoint. If absent, log a hint.
+        const r = await fetch('/api/stt', { method:'POST', body: blob });
+        if(r.ok){ const j=await r.json(); const text=j?.text||''; const qEl=$('#q'); if(qEl && text) qEl.value=text; appendLog(text? `STT: ${text}` : '(STT empty)'); }
+        else { appendLog('STT endpoint not available'); }
+      }catch(err){ console.warn('stt failed', err); appendLog('PTT error'); }
+      finally{ try{ pttStream?.getTracks?.().forEach(t=>t.stop()); }catch{} pttStream=null; pttRecorder=null; }
+    };
+    pttRecorder.start(); appendLog('PTT: recording...');
+  }catch(e){ console.warn('pttStart failed', e); appendLog('PTT error'); }
+}
+function pttStop(){ try{ pttRecorder?.stop(); }catch{} }
 function applyMapCommand(cmd){ try{
   if(cmd.set_center){ const {lat,lon}=cmd.set_center; if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return; } }
   if(cmd.adjust_center){ const {north_km=0,east_km=0}=cmd.adjust_center; const lat0=Number(latI.value), lon0=Number(lonI.value); const dlat = north_km/111.132; const dlon = east_km/(111.320*Math.cos(lat0*Math.PI/180)); latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); scheduleRefresh(0); return; }
@@ -288,8 +315,9 @@ async function startAR(){
     const ok = await navigator.xr.isSessionSupported?.('immersive-ar');
     if(ok===false){ alert('immersive-ar not supported'); return; }
     let session;
-    try{ const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsStrict);}catch(_){ const optsLoose={ requiredFeatures:['local-floor'], optionalFeatures:['dom-overlay','hit-test'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsLoose); }
+    try{ const optsStrict={ requiredFeatures:['dom-overlay','local-floor'], optionalFeatures:['hit-test','hand-tracking'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsStrict);}catch(_){ const optsLoose={ requiredFeatures:['local-floor'], optionalFeatures:['dom-overlay','hit-test','hand-tracking'], domOverlay:{ root: overlayRoot } }; renderer.xr.setReferenceSpaceType('local-floor'); session=await navigator.xr.requestSession('immersive-ar', optsLoose); }
     await renderer.xr.setSession(session);
+    try{ const ui=document.getElementById('ui'); if(ui) ui.style.display='none'; if(overlayRoot) overlayRoot.style.display='block'; }catch{}
     // Controller visuals + rays
     try{ const factory=new XRControllerModelFactory();
       const grip0=renderer.xr.getControllerGrip(0); grip0.add(factory.createControllerModel(grip0)); scene.add(grip0);
@@ -297,6 +325,8 @@ async function startAR(){
       const mkRay=()=>{ const geo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)]); const ln=new THREE.Line(geo, new THREE.LineBasicMaterial({color:0x00aaff})); ln.scale.z=1.5; return ln; };
       const ctrl0=renderer.xr.getController(0); ctrl0.add(mkRay()); scene.add(ctrl0);
       const ctrl1=renderer.xr.getController(1); ctrl1.add(mkRay()); scene.add(ctrl1);
+      ctrl0.addEventListener('connected', (e)=>{ try{ ctrl0.userData.gamepad = e.data?.gamepad; }catch{} });
+      ctrl1.addEventListener('connected', (e)=>{ try{ ctrl1.userData.gamepad = e.data?.gamepad; }catch{} });
       const onSelect=(e)=>{ if(!hud) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects(interactiveTargets,true); if(hits.length>0){ const a=hits[0].object?.userData?.action; if(a==='focus'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0);} }
         else if(a==='follow'){ followMode=!followMode; if(followChk){ followChk.checked=followMode; } if(followMode && selectedIdx>=0){ const s=lastStates[selectedIdx]; selectedKey=s?.icao24||s?.callsign||null; } }
         else if(a==='ask'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}).then(r=>r.json()).then(({text})=>{ appendLog(text||'(no response)'); }); } }
@@ -311,15 +341,20 @@ async function startAR(){
       ctrl0.addEventListener('selectstart', onSelect); ctrl1.addEventListener('selectstart', onSelect);
       const onSqueeze=(e)=>{ followMode=!followMode; if(followChk) followChk.checked=followMode; };
       ctrl0.addEventListener('squeeze', onSqueeze); ctrl1.addEventListener('squeeze', onSqueeze);
+      ctrl0.addEventListener('squeezestart', ()=>{ try{ pttStart(); }catch{} });
+      ctrl0.addEventListener('squeezeend', ()=>{ try{ pttStop(); }catch{} });
+      ctrl1.addEventListener('squeezestart', ()=>{ try{ pttStart(); }catch{} });
+      ctrl1.addEventListener('squeezeend', ()=>{ try{ pttStop(); }catch{} });
     }catch{}
     try{ if(session.requestReferenceSpace && session.requestHitTestSource){ viewerSpace=await session.requestReferenceSpace('viewer'); hitTestSource=await session.requestHitTestSource({ space: viewerSpace }); } }catch{}
     try{ reticle=new THREE.Mesh(new THREE.RingGeometry(0.07,0.09,32).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({color:0x44ff88, transparent:true, opacity:0.85 })); reticle.visible=false; scene.add(reticle);}catch{}
     ensureHUD();
+    console.info('presenting?', renderer.xr.isPresenting, 'domOverlayState=', session.domOverlayState?.type, 'visibility=', session.visibilityState);
     useAR=true; updateCanvasPointer(); animateAR(session);
-    session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; updateCanvasPointer(); });
+    session.addEventListener('end', ()=>{ hitTestSource=null; viewerSpace=null; reticle=null; useAR=false; updateCanvasPointer(); try{ const ui=document.getElementById('ui'); if(ui) ui.style.display=''; if(overlayRoot) overlayRoot.style.display=''; }catch{} });
   }catch(e){ alert('Failed to start AR: '+(e?.message||e)); }
 }
-function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame && hitTestSource){ try{ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { if(reticle) reticle.visible=false; } }catch{} } updateLabelScales(); renderer.render(scene,camera); }); }
+function animateAR(session){ const refSpace=renderer.xr.getReferenceSpace(); renderer.setAnimationLoop((t,frame)=>{ if(frame && hitTestSource){ try{ const results=frame.getHitTestResults(hitTestSource)||[]; if(results.length>0){ const pose=results[0].getPose(refSpace); if(pose){ const p=pose.transform.position; if(reticle){ reticle.visible=true; reticle.position.set(p.x,p.y,p.z); } } } else { if(reticle) reticle.visible=false; } }catch{} } try{ const ctrl0=renderer.xr.getController(0); const gp=ctrl0?.userData?.gamepad; if(gp&&gp.axes){ const ax=gp.axes[0]||0, ay=gp.axes[1]||0; if(Math.abs(ay)>0.25) adjustZoom(ay*-0.03); if(Math.abs(ax)>0.25) adjustPanSpeed(ax*0.02); } }catch{} updateLabelScales(); renderer.render(scene,camera); }); }
 
 // Demo data
 function genDemoStates(center, n=6){ const out=[]; for(let i=0;i<n;i++){ const ang=(i/n)*Math.PI*2; const dkm= 2 + (i%3); const dlat=(dkm/111.132); const dlon=(dkm/(111.320*Math.cos(center.lat*Math.PI/180))); const lat=center.lat+Math.sin(ang)*dlat; const lon=center.lon+Math.cos(ang)*dlon; out.push({ icao24:`demo${i}`, callsign:`DEMO${i+1}`, lat, lon, geo_alt: 200+i*50, vel: 70+i*5, hdg: (ang*180/Math.PI)%360 }); } return out; }
@@ -331,4 +366,3 @@ updateCanvasPointer();
 
 // Kick-off
 refresh();
-
