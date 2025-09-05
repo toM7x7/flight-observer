@@ -266,7 +266,7 @@ const askBtn=$('#ask');
 if(askBtn) askBtn.onclick=async ()=>{
   const qEl=$('#q'); const speakEl=$('#speak');
   const q=(qEl?.value||'').trim(); if(!q){ appendLog('Please enter a question'); return; }
-  askBtn.disabled=true;
+  askBtn.disabled=true; try{ setMicState('replying'); }catch{}
   const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) };
   const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined;
   try{
@@ -278,14 +278,20 @@ if(askBtn) askBtn.onclick=async ()=>{
     appendLog(text||'(no response)'); if(useAR && text) try{ showARText(text); }catch{}
     if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); }
   }catch(e){ console.error('ask failed', e); appendLog('Error: '+(e?.message||e)); }
-  finally{ askBtn.disabled=false; }
+  finally{ askBtn.disabled=false; if(micState==='replying') try{ setMicState('idle'); }catch{} }
 };
 // Press-To-Talk (PTT) microphone to /api/stt (optional)
 let pttStream=null, pttRecorder=null, pttChunks=[];
+let micState='idle';
+let audioCtx=null; function ensureAudioCtx(){ if(!audioCtx){ const AC=(window.AudioContext||window.webkitAudioContext); audioCtx=new AC(); } return audioCtx; }
+function beep(kind='start'){ try{ const ac=ensureAudioCtx(); ac.resume?.(); const o=ac.createOscillator(); const g=ac.createGain(); o.type='sine'; o.frequency.value=(kind==='start'?880:(kind==='end'?660:520)); g.gain.value=0.0001; o.connect(g).connect(ac.destination); const t=ac.currentTime; o.start(t); g.gain.exponentialRampToValueAtTime(0.08, t+0.02); g.gain.exponentialRampToValueAtTime(0.0001, t+0.12); o.stop(t+0.14);}catch{} }
+function setMicState(s, note=''){ micState=s; try{ updateHudMicVisual(); if(note) appendLog(`Mic: ${s} ${note}`);}catch{} }
+function updateHudMicVisual(){ try{ if(!hudMic) return; const tex=hudMic.material?.map; const cvs=tex?.image; const ctx=cvs?.getContext?.('2d'); if(!ctx) return; ctx.clearRect(0,0,256,128); let bg='#22303a', label='Mic'; if(micState==='capturing'){ bg='#b14a4a'; label='REC'; } else if(micState==='uploading'){ bg='#394b6a'; label='UP'; } else if(micState==='transcribing'){ bg='#364a2a'; label='STT'; } else if(micState==='replying'){ bg='#2a3a4d'; label='TTS'; } else if(micState==='error'){ bg='#6a2a2a'; label='ERR'; } ctx.fillStyle=bg; ctx.fillRect(0,0,256,128); ctx.strokeStyle='#4b6a84'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124); ctx.fillStyle='#fff'; ctx.font='bold 40px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,128,64); tex.needsUpdate=true; }catch{} }
 async function pttStart(){
   try{
     if(pttRecorder) return; if(!navigator.mediaDevices?.getUserMedia) return appendLog('PTT not available');
-    pttStream = await navigator.mediaDevices.getUserMedia({audio:true});
+    await ensureAudioCtx()?.resume();
+    pttStream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:false}});
     pttChunks=[];
     const mime = MediaRecorder.isTypeSupported?.('audio/webm')? 'audio/webm' : '';
     pttRecorder = new MediaRecorder(pttStream, mime? {mimeType:mime}: {});
@@ -294,18 +300,17 @@ async function pttStart(){
       try{
         const blob = new Blob(pttChunks, {type:'audio/webm'});
         pttChunks=[];
-        // Try optional STT endpoint. If absent, log a hint.
+        setMicState('uploading');
         const r = await fetch('/api/stt', { method:'POST', body: blob });
-        if(r.ok){ const j=await r.json(); const text=j?.text||''; const qEl=$('#q'); if(qEl && text) qEl.value=text; appendLog(text? `STT: ${text}` : '(STT empty)'); }
-        else { appendLog('STT endpoint not available'); }
+        if(r.ok){ setMicState('transcribing'); const j=await r.json(); const text=j?.text||''; const qEl=$('#q'); if(qEl && text) qEl.value=text; appendLog(text? `STT: ${text}` : '(STT empty)'); if(text){ setMicState('replying'); askBtn?.click(); } else { setMicState('idle'); } }
+        else { appendLog('STT endpoint not available'); setMicState('error'); setTimeout(()=>setMicState('idle'),1200); }
       }catch(err){ console.warn('stt failed', err); appendLog('PTT error'); }
       finally{ try{ pttStream?.getTracks?.().forEach(t=>t.stop()); }catch{} pttStream=null; pttRecorder=null; }
     };
-    pttRecorder.start(); appendLog('PTT: recording...');
-    try{ const tex=hudMic?.material?.map; if(tex?.image){ const cvs=tex.image; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,256,128); ctx.fillStyle='#b14a4a'; ctx.fillRect(0,0,256,128); ctx.strokeStyle='#ffaaaa'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124); ctx.fillStyle='#fff'; ctx.font='bold 40px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('REC',128,64); tex.needsUpdate=true; } }catch{}
+    pttRecorder.start(); setMicState('capturing'); beep('start');
   }catch(e){ console.warn('pttStart failed', e); appendLog('PTT error'); }
 }
-function pttStop(){ try{ pttRecorder?.stop(); }catch{} try{ const tex=hudMic?.material?.map; if(tex?.image){ const cvs=tex.image; const ctx=cvs.getContext('2d'); ctx.clearRect(0,0,256,128); ctx.fillStyle='#22303a'; ctx.fillRect(0,0,256,128); ctx.strokeStyle='#4b6a84'; ctx.lineWidth=4; ctx.strokeRect(2,2,252,124); ctx.fillStyle='#cfe8ff'; ctx.font='bold 40px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('Mic',128,64); tex.needsUpdate=true; } }catch{} }
+function pttStop(){ try{ pttRecorder?.stop(); }catch{} setMicState('uploading'); beep('end'); }
 function applyMapCommand(cmd){ try{
   if(cmd.set_center){ const {lat,lon}=cmd.set_center; if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return; } }
   if(cmd.adjust_center){ const {north_km=0,east_km=0}=cmd.adjust_center; const lat0=Number(latI.value), lon0=Number(lonI.value); const dlat = north_km/111.132; const dlon = east_km/(111.320*Math.cos(lat0*Math.PI/180)); latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); scheduleRefresh(0); return; }
