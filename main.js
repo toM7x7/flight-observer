@@ -1,4 +1,10 @@
 ﻿import * as THREE from 'three';
+
+
+  const q=(qEl?.value||'').trim(); if(!q){ appendLog('Please enter a question'); return; }
+  if(applyQuickVoiceCommand(q)) { try{ setMicState('idle'); }catch{} return; }
+  askBtn.disabled=true; try{ setMicState('replying'); }catch{}
+import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { CONFIG } from './config.js';
 
