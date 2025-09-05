@@ -32,6 +32,8 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
       '最新性が必要な場合は、次のJSONのみを単独で返してください: {"search_web":{"q":"<検索語>"}}',
       '地図操作の音声/テキスト指示が含まれる場合は、次のいずれかのJSONのみを単独で返してください:',
       '{"map_command":{"set_center":{"lat":<num>,"lon":<num>}}} | {"map_command":{"adjust_center":{"north_km":<num>,"east_km":<num>}}} | {"map_command":{"set_radius":{"km":<num>}}} | {"map_command":{"follow":{"on":true|false}}}',
+      'フライト選択の指示が含まれる場合は、次のJSONのみを単独で返してください:',
+      '{"select_flight":{"by":"callsign","value":"JAL688","focus":true,"follow":false}} | {"select_flight":{"by":"index","value":1}}',
     ].join('\n');
 
     const ctx = [
@@ -44,8 +46,13 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
     const first = await ai.models.generateContent({ model:'gemini-2.5-flash', contents:[{ role:'user', parts:[{text:ctx}] }] });
     const firstText = (first as any).text || '';
 
-    let searchQ: string | null = null; let mapCommand:any = null;
-    try { const maybe = JSON.parse(firstText.trim()); if (maybe && maybe.search_web && typeof maybe.search_web.q === 'string') searchQ = maybe.search_web.q; if (maybe && maybe.map_command) mapCommand = maybe.map_command; } catch {}
+    let searchQ: string | null = null; let mapCommand:any = null; let selectFlight:any = null;
+    try {
+      const maybe = JSON.parse(firstText.trim());
+      if (maybe && maybe.search_web && typeof maybe.search_web.q === 'string') searchQ = maybe.search_web.q;
+      if (maybe && maybe.map_command) mapCommand = maybe.map_command;
+      if (maybe && maybe.select_flight) selectFlight = maybe.select_flight;
+    } catch {}
 
     if (searchQ) {
       const results = await searchWeb(searchQ);
@@ -61,10 +68,9 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
 
       const second = await ai.models.generateContent({ model:'gemini-2.5-flash', contents:[{role:'user', parts:[{text:secondPrompt}]}] });
       const text = (second as any).text || firstText;
-      return res.json({ text, sources: results, map_command: null });
+      return res.json({ text, sources: results, map_command: null, select_flight: null });
     }
 
-    return res.json({ text: firstText, sources: [], map_command: mapCommand||null });
+    return res.json({ text: firstText, sources: [], map_command: mapCommand||null, select_flight: selectFlight||null });
   }catch(e:any){ return res.status(500).json({error:e?.message||'ask_failed'}); }
 }
-

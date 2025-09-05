@@ -88,7 +88,9 @@ let guideLine=null; function ensureGuideLine(){ if(guideLine) return; const geo=
 
 // Simple head-locked HUD for AR
 const raycaster = new THREE.Raycaster();
-let hud=null, hudFocus=null, hudFollow=null, hudAsk=null, dirArrow=null; const interactiveTargets=[];
+let hud=null, hudFocus=null, hudFollow=null, hudAsk=null, dirArrow=null;
+let hudRPlus=null, hudRMinus=null, hudNorth=null, hudSouth=null, hudEast=null, hudWest=null;
+const interactiveTargets=[];
 function makeHudButton(text, w=0.14, h=0.06){
   const cvs=document.createElement('canvas'); cvs.width=256; cvs.height=128; const ctx=cvs.getContext('2d');
   ctx.fillStyle='#22303a'; ctx.fillRect(0,0,256,128);
@@ -106,9 +108,18 @@ function ensureHUD(){ if(hud) return; hud=new THREE.Group();
   hudFocus=makeHudButton('Focus'); hudFocus.position.set(-0.16,-0.08,0); hudFocus.userData.action='focus';
   hudFollow=makeHudButton('Follow'); hudFollow.position.set(0.0,-0.08,0); hudFollow.userData.action='follow';
   hudAsk=makeHudButton('Ask'); hudAsk.position.set(0.16,-0.08,0); hudAsk.userData.action='ask';
+  // AR単体操作（半径／中心移動）
+  hudRPlus=makeHudButton('+R', 0.08, 0.05); hudRPlus.position.set(0.24,-0.08,0); hudRPlus.userData.action='radius+';
+  hudRMinus=makeHudButton('-R', 0.08, 0.05); hudRMinus.position.set(0.32,-0.08,0); hudRMinus.userData.action='radius-';
+  hudNorth=makeHudButton('N', 0.06, 0.06); hudNorth.position.set(-0.06,0.02,0); hudNorth.userData.action='north';
+  hudSouth=makeHudButton('S', 0.06, 0.06); hudSouth.position.set(-0.06,-0.18,0); hudSouth.userData.action='south';
+  hudWest =makeHudButton('W', 0.06, 0.06); hudWest .position.set(-0.13,-0.08,0); hudWest .userData.action='west';
+  hudEast =makeHudButton('E', 0.06, 0.06); hudEast .position.set( 0.01,-0.08,0); hudEast .userData.action='east';
   dirArrow=makeArrow(); dirArrow.position.set(0,0.06,0);
-  hud.add(hudFocus); hud.add(hudFollow); hud.add(hudAsk); hud.add(dirArrow); scene.add(hud);
-  interactiveTargets.push(hudFocus, hudFollow, hudAsk);
+  hud.add(hudFocus); hud.add(hudFollow); hud.add(hudAsk); hud.add(hudRPlus); hud.add(hudRMinus);
+  hud.add(hudNorth); hud.add(hudSouth); hud.add(hudWest); hud.add(hudEast);
+  hud.add(dirArrow); scene.add(hud);
+  interactiveTargets.push(hudFocus, hudFollow, hudAsk, hudRPlus, hudRMinus, hudNorth, hudSouth, hudWest, hudEast);
   hud.onBeforeRender=()=>{
     const camPos=new THREE.Vector3(); camera.getWorldPosition(camPos);
     const camDir=new THREE.Vector3(); camera.getWorldDirection(camDir);
@@ -119,6 +130,15 @@ function ensureHUD(){ if(hud) return; hud=new THREE.Group();
         const ang=Math.atan2(local.x, -local.z); dirArrow.visible=true; dirArrow.rotation.z = -ang; } else { dirArrow.visible=false; } }
     else { dirArrow.visible=false; }
   };
+}
+
+function adjustCenterByKm(northKm=0, eastKm=0){
+  const lat0=Number(latI.value), lon0=Number(lonI.value);
+  const dlat = northKm/111.132;
+  const dlon = eastKm/(111.320*Math.cos(lat0*Math.PI/180));
+  latI.value=String(lat0 + dlat);
+  lonI.value=String(lon0 + dlon);
+  scheduleRefresh(0);
 }
 
 // Labels
@@ -241,13 +261,25 @@ if (c){ c.addEventListener('pointerdown', onPointerDown); c.addEventListener('po
 
 // Ask (region-first)
 const askBtn=$('#ask');
-if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const resp=await g.json(); const text=resp?.text||''; if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{} appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
+if(askBtn) askBtn.onclick=async ()=>{ const qEl=$('#q'); const speakEl=$('#speak'); const q=(qEl?.value||'').trim(); if(!q){ appendLog('質問を入力してください'); return; } const region={ lat:Number(latI.value), lon:Number(lonI.value), radius_km:Number(radI.value||30) }; const first=lastStates[0]; const flight=first? { callsign:first.callsign, alt_m:first.geo_alt??first.baro_alt??0, vel_ms:first.vel??0, hdg_deg:first.hdg??0, lat:first.lat, lon:first.lon } : undefined; try{ const g=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ message:q, region, flight })}); const resp=await g.json(); const text=resp?.text||''; if(resp?.map_command) try{ applyMapCommand(resp.map_command);}catch{} if(resp?.select_flight) try{ applySelectFlight(resp.select_flight);}catch{} appendLog(text||'(no response)'); if(speakEl?.checked && text){ const t=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ text, model_uuid: CONFIG.AIVIS_MODEL_UUID, use_ssml:true })}); const buf=await t.arrayBuffer(); new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/mpeg'}))).play(); } }catch(e){ console.error('ask failed', e); appendLog('エラー: '+(e?.message||e)); } };
 function applyMapCommand(cmd){ try{
   if(cmd.set_center){ const {lat,lon}=cmd.set_center; if(Number.isFinite(lat)&&Number.isFinite(lon)){ latI.value=String(lat); lonI.value=String(lon); scheduleRefresh(0); return; } }
   if(cmd.adjust_center){ const {north_km=0,east_km=0}=cmd.adjust_center; const lat0=Number(latI.value), lon0=Number(lonI.value); const dlat = north_km/111.132; const dlon = east_km/(111.320*Math.cos(lat0*Math.PI/180)); latI.value=String(lat0 + dlat); lonI.value=String(lon0 + dlon); scheduleRefresh(0); return; }
   if(cmd.set_radius){ const {km}=cmd.set_radius; if(Number.isFinite(km)){ radI.value=String(km); scheduleRefresh(0); return; } }
   if(cmd.follow){ followMode = !!cmd.follow.on; if(followChk) followChk.checked=followMode; }
 }catch(e){ console.warn('map_command failed', e); }
+}
+
+function applySelectFlight(sel){ try{
+  const by=(sel?.by||'').toLowerCase(); const v=sel?.value;
+  let idx=-1;
+  if(by==='index' && Number.isFinite(v)){ idx = Math.max(0, Math.min(lastStates.length-1, Number(v))); }
+  else if(by==='callsign' && typeof v==='string'){
+    const normalize=(s)=>String(s||'').replace(/\s+/g,'').toUpperCase(); const tgt=normalize(v);
+    idx = lastStates.findIndex(s=> normalize(s.callsign)===tgt );
+  }
+  if(idx>=0){ selectedIdx=idx; const s=lastStates[idx]; selectedKey = s?.icao24 || s?.callsign || null; updateSelectionUI(); if(sel.focus){ latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0); } if(sel.follow!==undefined){ followMode=!!sel.follow; if(followChk) followChk.checked=followMode; } }
+}catch(e){ console.warn('select_flight failed', e); }
 }
 
 // Voice input (Web Speech API, optional)
@@ -284,6 +316,12 @@ async function startAR(){
       const onSelect=(e)=>{ if(!hud) return; const src=e.target; const m=src.matrixWorld; const origin=new THREE.Vector3().setFromMatrixPosition(m); const dir=new THREE.Vector3(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(m)).normalize(); raycaster.set(origin, dir); const hits=raycaster.intersectObjects(interactiveTargets,true); if(hits.length>0){ const a=hits[0].object?.userData?.action; if(a==='focus'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; latI.value=String(s.lat); lonI.value=String(s.lon); scheduleRefresh(0);} }
         else if(a==='follow'){ followMode=!followMode; if(followChk){ followChk.checked=followMode; } if(followMode && selectedIdx>=0){ const s=lastStates[selectedIdx]; selectedKey=s?.icao24||s?.callsign||null; } }
         else if(a==='ask'){ if(selectedIdx>=0){ const s=lastStates[selectedIdx]; const flight={callsign:s.callsign,alt_m:s.geo_alt??s.baro_alt??0,vel_ms:s.vel??0,hdg_deg:s.hdg??0,lat:s.lat,lon:s.lon}; fetch('/api/describe-flight',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flight})}).then(r=>r.json()).then(({text})=>{ appendLog(text||'(no response)'); }); } }
+        else if(a==='radius+'){ const r=Number(radI.value||30); radI.value=String(Math.round(Math.min(200, r+2))); scheduleRefresh(0); }
+        else if(a==='radius-'){ const r=Number(radI.value||30); radI.value=String(Math.round(Math.max(5, r-2))); scheduleRefresh(0); }
+        else if(a==='north'){ adjustCenterByKm(0.5,0); }
+        else if(a==='south'){ adjustCenterByKm(-0.5,0); }
+        else if(a==='west'){ adjustCenterByKm(0,-0.5); }
+        else if(a==='east'){ adjustCenterByKm(0,0.5); }
       } };
       ctrl0.addEventListener('select', onSelect); ctrl1.addEventListener('select', onSelect);
     }catch{}
