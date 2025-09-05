@@ -30,13 +30,13 @@
       <button id="startAR">AR開始</button>
       <button id="demoBtn">DEMO</button>
       <select id="preset"></select>
-      <button id="savePreset">＋現在地を保存</button>
+      <button id="savePreset">現在の位置を保存</button>
     </div>
     <div class="row">
       注目:
-      <button id="focusBtn" title="選択中の便を中心に移動">選択へ移動</button>
-      追従:
-      <label><input id="follow" type="checkbox" /> 選択便を追従</label>
+      <button id="focusBtn" title="選択中の便を中心へ移動">選択へ移動</button>
+      追尾
+      <label><input id="follow" type="checkbox" /> 選択便を追尾</label>
     </div>
     <div class="row">
       高度:
@@ -45,7 +45,7 @@
         <option value="baro">気圧(baro)</option>
         <option value="agl">AGL(地表差)</option>
       </select>
-      誇張:
+      倍率:
       <input id="altScale" type="range" min="0.001" max="0.02" step="0.001" value="0.006" title="高さの見かけ倍率(基準比)" />
       <span id="altScaleVal">x1.00</span>
       地面高度(m):
