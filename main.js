@@ -14,15 +14,17 @@ $('#toggleBtn')?.addEventListener('click', ()=>toggleView());
 $('#startAR')?.addEventListener('click', startAR);
 
 // Optional demo
-document.getElementById('demoBtn')?.addEventListener('click', ()=>{
+document.getElementById('demoBtn')?.addEventListener('click', ()=> runDemo(3));
+
+function runDemo(n=3){
   const lat=Number(latI.value), lon=Number(lonI.value);
-  const demo = genDemoStates({lat,lon}, 6);
-  lastStates = demo;
+  lastStates = genDemoStates({lat,lon}, n);
   $('#src').textContent=`source: demo | flights: ${lastStates.length}`;
   placeMarkers({lat,lon}, lastStates);
+  selectedIdx = -1;
   renderList(lastStates);
   applySelectionEffects();
-});
+}
 
 // Robust AR button state (fail-safe)
 const startBtn = document.getElementById('startAR');
@@ -113,7 +115,11 @@ async function refresh(){
     renderList(lastStates);
     applySelectionEffects();
     if(!useAR) renderer.setAnimationLoop(()=>renderer.render(scene,camera));
-  }catch(e){ console.error('fetch failed', e); alert('Fetch failed: '+(e?.message||e)); }
+  }catch(e){
+    console.error('fetch failed', e);
+    alert('Live fetch failed. Falling back to DEMO (3 flights).');
+    runDemo(3);
+  }
 }
 
 function renderList(states){
@@ -206,4 +212,3 @@ function genDemoStates(center, n=6){
 
 // Kick-off
 refresh();
-
