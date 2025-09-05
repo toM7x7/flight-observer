@@ -7,6 +7,7 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
     now: new Date().toISOString(),
     env: {
       hasGemini: !!process.env.GEMINI_API_KEY,
+      hasOpenAI: !!process.env.OPENAI_API_KEY,
       hasAivis: !!process.env.AIVIS_API_KEY,
       hasOpenSkyClient: !!process.env.OPENSKY_CLIENT_ID,
       hasOpenSkySecret: !!process.env.OPENSKY_CLIENT_SECRET,
@@ -16,4 +17,3 @@ export default async function handler(req:VercelRequest, res:VercelResponse){
   };
   return res.status(200).json(out);
 }
-

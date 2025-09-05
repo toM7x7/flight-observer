@@ -442,6 +442,15 @@ updateCanvasPointer();
 
 // Kick-off
 refresh();
+// STT endpoint availability probe (updates HUD mic state)
+async function checkSTT(){
+  try{
+    const r = await fetch('/api/stt', { method:'OPTIONS' });
+    if(r.status===404){ try{ setMicState('unavailable','STT 404'); }catch{} }
+    else { try{ setMicState('idle'); }catch{} }
+  }catch{ try{ setMicState('unavailable'); }catch{} }
+}
+checkSTT();
 
 
 

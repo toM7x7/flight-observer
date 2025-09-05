@@ -1,8 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'OPTIONS' || req.method === 'GET') {
+    res.setHeader('Allow', 'POST,OPTIONS');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(req.method === 'OPTIONS' ? 204 : 405).end();
+  }
   try {
-    if (req.method !== 'POST') { return res.status(405).json({ error: 'method_not_allowed' }); }
+    if (req.method !== 'POST') { res.setHeader('Allow','POST,OPTIONS'); return res.status(405).json({ error: 'method_not_allowed' }); }
     const key = process.env.OPENAI_API_KEY;
     if (!key) return res.status(500).json({ error: 'OPENAI_API_KEY missing' });
 
@@ -32,4 +37,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: e?.message || 'stt_failed' });
   }
 }
-
